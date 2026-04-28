@@ -423,11 +423,16 @@ const JsExcelGrid =(props:GridType)=> {
                                     colWidths: colWidthByKey,
                                 },
                             }));
-                            props.onHeaderSave?.({
-                                sheetId: activeId,
-                                sheetName: activeSheet?.name,
-                                headers: payload,
-                            });
+                            // 패키지는 API를 호출하지 않는다. 사용처가 저장 후 data를 갱신해 내려주면 된다.
+                            Promise
+                                .resolve(props.onHeaderSave?.({
+                                    sheetId: activeId,
+                                    sheetName: activeSheet?.name,
+                                    headers: payload,
+                                }))
+                                .catch(() => {
+                                    // 사용처에서 실패 처리(UI)를 할 수 있게 여기선 무시
+                                });
                         }
                         setIsFieldsMenuOpen(false);
                     }}

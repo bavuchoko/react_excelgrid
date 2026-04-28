@@ -1,6 +1,6 @@
-import type { ExcelGridData, Header } from "./app/type/Type.ts";
-import JsExcelGrid from "./app/JsExcelGrid.tsx";
-import { useCallback, useMemo, useState } from "react";
+import { JsExcelGrid, applyHeaderStateToHeader } from "./app/index.ts";
+import type { ExcelGridData, Header, SheetHeaderSavePayload } from "./app/index.ts";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const PAGE_SIZE = 15;
 
@@ -48,7 +48,44 @@ const App = () => {
     [pageNumber],
   );
 
-  const onHeaderSave = useCallback((v: unknown) => console.log(v), []);
+  const [data, setData] = useState<ExcelGridData>(() => {
+    const sheet1 = {
+      id: "sheet-1",
+      name: "Sheet 1",
+      header: [] as Header[],
+      content: [] as any[],
+    };
+    const sheet2 = {
+      id: "sheet-2",
+      name: "Sheet 2",
+      header: [] as Header[],
+      content: [] as any[],
+    };
+    return { sheets: [sheet1, sheet2] };
+  });
+
+  // 서버는 성공 여부만 내려준다고 가정
+  const saveHeaderApi = useCallback(async (_payload: SheetHeaderSavePayload) => {
+    await new Promise((r) => setTimeout(r, 150));
+    return true as const;
+  }, []);
+
+  const onHeaderSave = useCallback(async (payload: SheetHeaderSavePayload) => {
+    const ok = await saveHeaderApi(payload);
+    if (!ok) return;
+
+    setData((prev) => ({
+      ...prev,
+      sheets: prev.sheets.map((s) => {
+        if (s.id !== payload.sheetId) return s;
+        return {
+          ...s,
+          header: applyHeaderStateToHeader({ header: s.header, state: payload.headers }),
+        };
+      }),
+    }));
+  }, [saveHeaderApi]);
+
   const onUploadClick = useCallback(() => console.log("upload clicked"), []);
   const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
   const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
@@ -60,20 +97,23 @@ const App = () => {
     setPageNumber(p.pageNumber ?? 0);
   }, []);
 
-  const data: ExcelGridData = useMemo(() => {
-    const sheet1 = {
-      id: "sheet-1",
-      name: "Sheet 1",
-      header,
-      content: allRows,
-    };
-    const sheet2 = {
-      id: "sheet-2",
-      name: "Sheet 2",
-      header,
-      content: allRows.map((r) => ({ ...r, title: `두번째 시트 - ${String((r as any).title ?? "")}` })),
-    };
-    return { sheets: [sheet1, sheet2] };
+  // 더미 데이터는 기존처럼 바뀌더라도, 헤더는 setData로 유지되도록 content만 갱신한다.
+  // (실제 서비스에선 content는 서버에서 내려오고, header설정은 별도 저장/복원)
+  useEffect(() => {
+    setData((prev) => ({
+      ...prev,
+      sheets: prev.sheets.map((s) => {
+        const nextContent =
+          s.id === "sheet-2"
+            ? allRows.map((r) => ({ ...r, title: `두번째 시트 - ${String((r as any).title ?? "")}` }))
+            : allRows;
+
+        // 초기 1회: header가 비어있으면 기본 header로 채워준다.
+        const nextHeader = s.header.length === 0 ? header : s.header;
+        return { ...s, header: nextHeader, content: nextContent };
+      }),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allRows, header]);
 
   return (
