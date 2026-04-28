@@ -1,4 +1,4 @@
-import type {GridType, Header, HeaderState, JsGridTableColumn, Page, Sheet} from "./type/Type.ts";
+import type {GridType, Header, HeaderState, JsGridTableColumn, Sheet} from "./type/Type.ts";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
@@ -6,7 +6,6 @@ import {computeLeftOffsets, getColumnFreezeStickyStyle} from "./js-grid/columnLa
 import {GRID_BORDER} from "./js-grid/gridStyles.ts";
 import JsGridTable from "./js-grid/JsGridTable.tsx";
 import JsGridToolbar from "./js-grid/JsGridToolbar.tsx";
-import Pagination from "./js-grid/Pagination.tsx";
 import {useColumnWidths} from "./js-grid/useColumnWidths.ts";
 import {useFreezeColumns} from "./js-grid/useFreezeColumns.ts";
 import SheetTabs from "./js-grid/SheetTabs.tsx";
@@ -41,41 +40,8 @@ const JsExcelGrid =(props:GridType)=> {
     const headerList: Header[] = activeSheet?.header ?? [];
     const activeId = activeSheet?.id ?? null;
 
-    const page: Page = useMemo(() => {
-        const totalElements = data.length;
-        return {
-            pageNumber: 0,
-            pageSize: totalElements,
-            size: totalElements,
-            totalElements,
-            totalPages: 1,
-        };
-    }, [data.length]);
-
-    const parseSortFromPageable = (p?: Page) => {
-        const s0 = p?.sort?.[0];
-        if (!s0) return { key: null as string | null, dir: 'ASC' as const };
-        const parts = String(s0).split(',');
-        const key = parts[0]?.trim();
-        const dirRaw = (parts[1] ?? p?.sortDirection ?? 'ASC').toString().trim().toUpperCase();
-        const dir = dirRaw === 'DESC' ? 'DESC' as const : 'ASC' as const;
-        return { key: key || null, dir };
-    };
-
     const [sortKey, setSortKey] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('ASC');
-
-    const serverSort = useMemo(() => parseSortFromPageable(undefined), []);
-    const serverSortToken = `${serverSort.key ?? ''}\u0000${serverSort.dir}`;
-    const [prevServerSortToken, setPrevServerSortToken] = useState(() => {
-        const s = parseSortFromPageable(undefined);
-        return `${s.key ?? ''}\u0000${s.dir}`;
-    });
-    if (prevServerSortToken !== serverSortToken) {
-        setPrevServerSortToken(serverSortToken);
-        setSortKey(serverSort.key);
-        setSortDir(serverSort.dir);
-    }
 
     const enablePseudoFullscreen = props.enablePseudoFullscreen !== false;
     const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
@@ -210,27 +176,8 @@ const JsExcelGrid =(props:GridType)=> {
         });
     }, [freezeUntilIndex, leftOffsets]);
 
-    const totalPages = page.totalPages ?? 1;
-    const currentPage0 = page.pageNumber ?? 0;
-
-    const pageableBase: Page = useMemo(() => {
-        const base = { ...page } as Page;
-        const size = base.pageSize ?? base.size ?? data.length;
-        const sortToken = sortKey ? `${sortKey},${sortDir.toLowerCase()}` : undefined;
-        return {
-            ...base,
-            ...(size != null ? { pageSize: size, size } : {}),
-            ...(sortToken ? { sort: [sortToken], sortDirection: sortDir } : { sort: undefined, sortDirection: undefined }),
-        };
-    }, [page, data.length, sortKey, sortDir]);
-
-    const emitPageable = useCallback((next: Page) => {
-        props.onPageChange?.(next);
-    }, [props.onPageChange]);
-
     const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(() => new Set());
     const [selectionAnchor, setSelectionAnchor] = useState(() => ({
-        page: page.pageNumber ?? 0,
         show: Boolean(props.onDeleteClick),
     }));
 
@@ -264,8 +211,8 @@ const JsExcelGrid =(props:GridType)=> {
         });
     }, []);
 
-    if (selectionAnchor.page !== currentPage0 || selectionAnchor.show !== showDelete) {
-        setSelectionAnchor({ page: currentPage0, show: showDelete });
+    if (selectionAnchor.show !== showDelete) {
+        setSelectionAnchor({ show: showDelete });
         setSelectedRowIndexes(new Set());
     }
 
@@ -441,7 +388,6 @@ const JsExcelGrid =(props:GridType)=> {
                 <JsGridTable
                     columns={columns}
                     data={data}
-                    page={page}
                     sortKey={sortKey}
                     sortDir={sortDir}
                     headerCellRefs={headerCellRefs}
@@ -454,27 +400,8 @@ const JsExcelGrid =(props:GridType)=> {
                     onSortChange={(next) => {
                         setSortKey(next.key);
                         setSortDir(next.direction);
-                        const size = pageableBase.pageSize ?? pageableBase.size;
-                        emitPageable({
-                            ...pageableBase,
-                            pageNumber: 0,
-                            ...(size != null ? { pageSize: size, size } : {}),
-                            sort: [`${next.key},${next.direction.toLowerCase()}`],
-                            sortDirection: next.direction,
-                        });
                     }}
                 />
-                <div style={{ flex: "0 0 auto" , backgroundColor: "rgb(248, 248, 248)",}}>
-                    <Pagination
-                        page={{
-                            currentPage: currentPage0,
-                            totalPages,
-                            totalElements: page.totalElements ?? 0,
-                        }}
-                        pageableBase={pageableBase}
-                        onPageChange={(nextPageable) => emitPageable(nextPageable)}
-                    />
-                </div>
             </div>
     );
 }

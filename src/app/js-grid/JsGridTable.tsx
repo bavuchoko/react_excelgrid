@@ -1,9 +1,8 @@
 import {getValue, gridRowNumericId} from "../hook/CommonMethod.ts";
 import {CELL_MAX_WIDTH_PX, COL_RESIZE_MAX_PX, COL_RESIZE_MIN_PX, GRID_BORDER} from "./gridStyles.ts";
-import {computeRowNumber} from "./rowNumber.ts";
 import type {CSSProperties, Dispatch, MutableRefObject, ReactNode, SetStateAction} from "react";
 import React, {isValidElement, useCallback, useLayoutEffect, useRef, useState} from "react";
-import type {JsGridTableColumn, Page} from "../type/Type.ts";
+import type {JsGridTableColumn} from "../type/Type.ts";
 import ASC from "../resources/icon/ASC.tsx";
 import DESC from "../resources/icon/DESC.tsx";
 
@@ -117,7 +116,6 @@ type RowSelectionProps = {
 type Props = {
     columns: readonly JsGridTableColumn[];
     data: unknown[];
-    page: Page;
     sortKey: string | null;
     /** 미지정·ASC는 ASC 아이콘, DESC만 DESC 아이콘 */
     sortDir?: 'ASC' | 'DESC';
@@ -336,14 +334,7 @@ export default function JsGridTable(props: Props) {
                                 const value = isCheckbox
                                     ? null
                                     : column.__rownum__
-                                    ? computeRowNumber({
-                                        pageNumber: props.page.pageNumber,
-                                        pageSize: props.page.size,
-                                        pageSizeAlt: props.page.pageSize,
-                                        totalElements: props.page.totalElements,
-                                        rowIndexOnPage: rdex,
-                                        fallbackPageSize: props.data.length,
-                                    })
+                                    ? (rdex + 1)
                                     : getValue(row, column.key);
 
                                 const stopRowClick = (e: unknown) => {

@@ -11,7 +11,7 @@ const MyCell = (props: any) => (
 );
 
 const App = () => {
-  const [pageNumber, setPageNumber] = useState(0);
+  const pageNumber = 0;
   const header: Header[] = useMemo(
     () => [
       { key: "creator.name", label: "등록자", type: "string" },
@@ -92,10 +92,6 @@ const App = () => {
   const onCreateClick = useCallback(() => console.log("create"), []);
   const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
   const onRowClick = useCallback((rows: unknown) => console.log("rowClick", rows), []);
-  const onPageChange = useCallback((p: any) => {
-    console.log("pageable", p);
-    setPageNumber(p.pageNumber ?? 0);
-  }, []);
 
   // 더미 데이터는 기존처럼 바뀌더라도, 헤더는 setData로 유지되도록 content만 갱신한다.
   // (실제 서비스에선 content는 서버에서 내려오고, header설정은 별도 저장/복원)
@@ -118,9 +114,8 @@ const App = () => {
 
   return (
     <div>
-      <div style={{ width: "700px", height: "800px", display: "flex", flexDirection: "column" }}>
+      <div style={{ width: "700px", height: "800px", display: "flex", flexDirection: "column", background:'red' }}>
         <JsExcelGrid
-          style={{ flex: "0 0 auto", maxHeight: "none" }}
           data={data}
           onHeaderSave={onHeaderSave}
           onUploadClick={onUploadClick}
@@ -129,7 +124,6 @@ const App = () => {
           onCreateClick={onCreateClick}
           onDeleteClick={onDeleteClick}
           onRowClick={onRowClick}
-          onPageChange={onPageChange}
         />
       </div>
     </div>

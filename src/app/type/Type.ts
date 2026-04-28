@@ -38,12 +38,6 @@ export type GridType ={
     onCreateClick?: () => void
     /** false면 전체화면(pseudo fullscreen) 토글 UI/동작을 비활성화한다. (기본값: true) */
     enablePseudoFullscreen?: boolean
-    /**
-     * Spring `Pageable`에 대응되는 값을 한 번에 전달한다.
-     * - `pageNumber`는 0-based
-     * - `sort`는 `property,direction` 형태(예: `createdAt,desc`)를 권장
-     */
-    onPageChange?: (pageable: Page) => void
     style?: CSSProperties
 }
 
@@ -72,19 +66,6 @@ export type JsGridTableColumn = {
     __rownum__?: boolean;
     __checkbox__?: boolean;
 };
-
-export type Page = {
-    pageNumber?: number;
-    size?: number;
-    pageSize?: number;
-    sort?: string[];
-    desc?: string;
-    /** Spring `Page` 응답과 동일하게 UI(행번호 등)에서 참조할 수 있음 */
-    totalElements?: number;
-    totalPages?: number;
-    /** 단일 컬럼 정렬 UI에서 방향을 명시적으로 실어 보낼 때 사용(optional) */
-    sortDirection?: 'ASC' | 'DESC';
-}
 
 export type Header ={
     key:string;
