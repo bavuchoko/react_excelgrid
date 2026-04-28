@@ -1,0 +1,8 @@
+body {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+table th tr td {
+  border-collapse: collapse;
+}
