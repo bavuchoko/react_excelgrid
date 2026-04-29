@@ -84,7 +84,11 @@ const App = () => {
                   title: `Sheet ${sheetNum} · 행 ${rowIdx + 1}`,
                   number: `${100 + sheetNum}-${String(rowIdx + 1).padStart(numPad, "0")}`,
                   creator: {
-                    name: sheetNum === 1 ? "등록자" : `등록자(시트${sheetNum})`,
+                    /** 정렬 테스트용: 등록자명 앞에 행 번호 */
+                    name:
+                      sheetNum === 1
+                        ? `${rowIdx + 1} 등록자`
+                        : `${rowIdx + 1} 등록자(시트${sheetNum})`,
                   },
                   category: {
                     name: ["네트워크", "서버", "보안", "앱"][sheetNum % 4],

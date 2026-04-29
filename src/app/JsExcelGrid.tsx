@@ -1,4 +1,4 @@
-import type {GridType, Header, HeaderState, JsGridTableColumn, Sheet} from "./type/Type.ts";
+import type {DataType, GridType, Header, HeaderState, JsGridTableColumn, Sheet} from "./type/Type.ts";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
@@ -11,6 +11,7 @@ import UploadFilePanel from "./js-grid/UploadFilePanel.tsx";
 import {useColumnWidths} from "./js-grid/useColumnWidths.ts";
 import {useFreezeColumns} from "./js-grid/useFreezeColumns.ts";
 import SheetTabs from "./js-grid/SheetTabs.tsx";
+import { sortRowsByHeader } from "./js-grid/sortSheetContent.ts";
 
 export default function JsExcelGrid(props: GridType) {
     const sheets = props.data?.sheets ?? [];
@@ -42,8 +43,21 @@ export default function JsExcelGrid(props: GridType) {
     const headerList: Header[] = activeSheet?.header ?? [];
     const activeId = activeSheet?.id ?? null;
 
+    const headerTypeByKey = useMemo(() => {
+        const m = new Map<string, DataType>();
+        for (const h of headerList) {
+            m.set(h.key, h.type);
+        }
+        return m;
+    }, [headerList]);
+
     const [sortKey, setSortKey] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('ASC');
+
+    const sortedData = useMemo(
+        () => sortRowsByHeader(data, sortKey, sortDir, headerTypeByKey),
+        [data, sortKey, sortDir, headerTypeByKey],
+    );
 
     const enablePseudoFullscreen = props.enablePseudoFullscreen !== false;
     const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
@@ -235,8 +249,8 @@ export default function JsExcelGrid(props: GridType) {
 
     const pageRowIds = useMemo(() => {
         // 선택은 `row.id`가 없어도 동작해야 하므로, 현재 페이지의 행 인덱스를 키로 사용한다.
-        return data.map((_, idx) => idx);
-    }, [data]);
+        return sortedData.map((_, idx) => idx);
+    }, [sortedData]);
 
     const headerChecked =
         pageRowIds.length > 0 && pageRowIds.every((id) => selectedRowIndexes.has(id));
@@ -334,7 +348,7 @@ export default function JsExcelGrid(props: GridType) {
                                 const selectedRows = Array
                                     .from(selectedRowIndexes)
                                     .sort((a, b) => a - b)
-                                    .map((i) => data[i])
+                                    .map((i) => sortedData[i])
                                     .filter((v) => v !== undefined);
                                 props.onDeleteClick?.(selectedRows);
                             }
@@ -474,7 +488,7 @@ export default function JsExcelGrid(props: GridType) {
                 ) : (
                     <JsGridTable
                         columns={columns}
-                        data={data}
+                        data={sortedData}
                         sortKey={sortKey}
                         sortDir={sortDir}
                         headerCellRefs={headerCellRefs}
