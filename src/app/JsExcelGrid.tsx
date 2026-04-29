@@ -1,5 +1,5 @@
 import type {DataType, GridType, Header, HeaderState, JsGridTableColumn, Sheet} from "./type/Type.ts";
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
 import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
 import {computeLeftOffsets, getColumnFreezeStickyStyle} from "./js-grid/columnLayout.ts";
@@ -158,6 +158,7 @@ export default function JsExcelGrid(props: GridType) {
     const [uploadPanelPos, setUploadPanelPos] = useState<{ top: number; right: number } | null>(null);
     const [uploadPanelBusy, setUploadPanelBusy] = useState(false);
     const [deleteBusy, setDeleteBusy] = useState(false);
+    const deleteSpinClass = useId().replace(/:/g, "");
 
     const toggleUploadPanel = useCallback((e: { stopPropagation: () => void }) => {
         e.stopPropagation();
@@ -542,33 +543,51 @@ export default function JsExcelGrid(props: GridType) {
                         style={{
                             position: "absolute",
                             inset: 0,
-                            zIndex: 80,
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            flexDirection: "column",
-                            gap: 14,
-                            backgroundColor: "rgba(255, 255, 255, 0.72)",
-                            cursor: "wait",
-                            backdropFilter: "blur(2px)",
+                            background: "rgba(255,255,255,0.35)",
+                            zIndex: 3,
+                            pointerEvents: "none",
                         }}
                     >
                         <div
                             style={{
-                                width: 34,
-                                height: 34,
-                                borderRadius: "50%",
-                                border: "3px solid #e5e7eb",
-                                borderTopColor: "#2563eb",
-                                animation: "jsgrid-delete-spin 0.75s linear infinite",
-                                boxSizing: "border-box",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 10,
+                                padding: "10px 14px",
+                                borderRadius: 8,
+                                background: "rgba(255,255,255,0.9)",
+                                border: "1px solid #d1d5db",
+                                color: "#111827",
+                                fontSize: 13,
+                                fontWeight: 600,
                             }}
-                            aria-hidden
-                        />
-                        <style>{`
-                          @keyframes jsgrid-delete-spin { to { transform: rotate(360deg); } }
-                        `}</style>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>삭제 중…</span>
+                        >
+                            <span
+                                className={`jsgrid-delete-spin-dot-${deleteSpinClass}`}
+                                style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: "50%",
+                                    border: "2px solid #e5e7eb",
+                                    borderTopColor: "#ef4444",
+                                    boxSizing: "border-box",
+                                }}
+                                aria-hidden
+                            />
+                            삭제 중...
+
+                            <style>{`
+                                @keyframes jsgrid-delete-spin-${deleteSpinClass} {
+                                    to { transform: rotate(360deg); }
+                                }
+                                .jsgrid-delete-spin-dot-${deleteSpinClass} {
+                                    animation: jsgrid-delete-spin-${deleteSpinClass} 0.75s linear infinite;
+                                }
+                            `}</style>
+                        </div>
                     </div>
                 ) : null}
                 </div>
