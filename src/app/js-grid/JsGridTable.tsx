@@ -230,13 +230,13 @@ export default function JsGridTable(props: Props) {
         <div ref={scrollRef} style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
             {/** thead만 있는 table과 가상 행 영역이 형제라, 세로 헤더 고정은 table을 sticky 래퍼로 두는 편이 안정적 */}
             <div
+                className={`221`}
                 style={{
                     position: "sticky",
                     top: 0,
                     zIndex: 10,
                     width: "max-content",
                     minWidth: "100%",
-                    backgroundColor: "#f8f8f8",
                 }}
             >
                 <table

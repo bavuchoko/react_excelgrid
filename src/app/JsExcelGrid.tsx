@@ -293,7 +293,6 @@ export default function JsExcelGrid(props: GridType) {
                 ref={rootRef}
                 style={{
                     border: `1px solid ${GRID_BORDER}`,
-                    borderBottom: 'none',
                     width: '100%',
                     // 부모가 고정 height를 가질 때는 maxHeight:100%로 "부모 안"에 맞추고,
                     // 내부 테이블 영역(JsGridTable wrapper)이 flex:1 + overflow:auto로 스크롤을 담당한다.
