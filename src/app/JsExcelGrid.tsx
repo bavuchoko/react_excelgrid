@@ -12,7 +12,7 @@ import {useColumnWidths} from "./js-grid/useColumnWidths.ts";
 import {useFreezeColumns} from "./js-grid/useFreezeColumns.ts";
 import SheetTabs from "./js-grid/SheetTabs.tsx";
 
-const JsExcelGrid =(props:GridType)=> {
+export default function JsExcelGrid(props: GridType) {
     const sheets = props.data?.sheets ?? [];
     const [activeSheetId, setActiveSheetId] = useState<string | null>(null);
     const [sheetColumnState, setSheetColumnState] = useState<Record<string, {
@@ -494,6 +494,3 @@ const JsExcelGrid =(props:GridType)=> {
             </div>
     );
 }
-
-export default JsExcelGrid;
-

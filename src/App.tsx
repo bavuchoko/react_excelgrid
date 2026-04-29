@@ -1,13 +1,15 @@
 import { JsExcelGrid, applyHeaderStateToHeader } from "./app/index.ts";
 import type { ExcelGridData, Header, SheetHeaderSavePayload } from "./app/index.ts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 const PAGE_SIZE = 15;
 /** 더미: 시트별 행 수(스크롤/가상화 확인용) */
 const SHEET3_DUMMY_ROW_COUNT = 50;
 const SHEET4_DUMMY_ROW_COUNT = 1500;
 
-const MyCell = (props: any) => (
+const SHEET_COUNT = 12;
+
+const MyCell = (props: { value?: unknown; rowIndex?: number }) => (
   <span onClick={() => console.log(props.value)}>
     {props.rowIndex}: {String(props.value ?? "")}
   </span>
@@ -51,59 +53,17 @@ const App = () => {
     [pageNumber],
   );
 
-  const [data, setData] = useState<ExcelGridData>(() => ({
-    sheets: Array.from({ length: 12 }, (_, i) => ({
-      id: `sheet-${i + 1}`,
-      name: `Sheet ${i + 1}`,
-      header: [] as Header[],
-      content: [] as any[],
-    })),
-  }));
+  /** 저장된 시트만 키 존재 · 없거나 비면 UI용 `header` 템플릿 사용 */
+  const [headerBySheetId, setHeaderBySheetId] = useState<Record<string, Header[]>>({});
 
-  // 서버는 성공 여부만 내려준다고 가정
-  const saveHeaderApi = useCallback(async (_payload: SheetHeaderSavePayload) => {
-    await new Promise((r) => setTimeout(r, 150));
-    return true as const;
-  }, []);
+  const data: ExcelGridData = useMemo(() => {
+    return {
+      sheets: Array.from({ length: SHEET_COUNT }, (_, i) => {
+        const sheetNum = i + 1;
+        const id = `sheet-${sheetNum}`;
+        const saved = headerBySheetId[id];
+        const sheetHeader = saved?.length ? saved : header;
 
-  const onHeaderSave = useCallback(async (payload: SheetHeaderSavePayload) => {
-    const ok = await saveHeaderApi(payload);
-    if (!ok) return;
-
-    setData((prev) => ({
-      ...prev,
-      sheets: prev.sheets.map((s) => {
-        if (s.id !== payload.sheetId) return s;
-        return {
-          ...s,
-          header: applyHeaderStateToHeader({ header: s.header, state: payload.headers }),
-        };
-      }),
-    }));
-  }, [saveHeaderApi]);
-
-  const onUploadFiles = useCallback(async (files: File[]) => {
-    await new Promise((r) => setTimeout(r, 1500));
-    console.log(
-      "업로드 완료 샘플",
-      files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-    );
-  }, []);
-
-  const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
-  const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
-  const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
-  const onRowClick = useCallback((rows: unknown) => console.log("rowClick", rows), []);
-
-  // 더미 데이터는 기존처럼 바뀌더라도, 헤더는 setData로 유지되도록 content만 갱신한다.
-  // (실제 서비스에선 content는 서버에서 내려오고, header설정은 별도 저장/복원)
-  useEffect(() => {
-    setData((prev) => ({
-      ...prev,
-      sheets: prev.sheets.map((s) => {
-        const m = /^sheet-(\d+)$/.exec(s.id);
-        const sheetNum = m ? Number(m[1]) : 1;
-        /** 시트 2: 빈 시트 테스트. 시트 3·4: 행 수 확장 더미. 그 외: PAGE_SIZE 행 */
         const rowCount =
           sheetNum === 2
             ? 0
@@ -132,16 +92,57 @@ const App = () => {
                 };
               });
 
-        const nextHeader = s.header.length === 0 ? header : s.header;
-        return { ...s, header: nextHeader, content: nextContent };
+        return {
+          id,
+          name: `Sheet ${sheetNum}`,
+          header: sheetHeader,
+          content: nextContent,
+        };
       }),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allRows, header]);
+    };
+  }, [allRows, header, headerBySheetId]);
+
+  const saveHeaderApi = useCallback(async (payload: SheetHeaderSavePayload) => {
+    void payload;
+    await new Promise((r) => setTimeout(r, 150));
+    return true as const;
+  }, []);
+
+  const onHeaderSave = useCallback(
+    async (payload: SheetHeaderSavePayload) => {
+      const ok = await saveHeaderApi(payload);
+      if (!ok) return;
+
+      setHeaderBySheetId((prev) => {
+        const current = prev[payload.sheetId]?.length ? prev[payload.sheetId]! : header;
+        return {
+          ...prev,
+          [payload.sheetId]: applyHeaderStateToHeader({
+            header: current,
+            state: payload.headers,
+          }),
+        };
+      });
+    },
+    [saveHeaderApi, header],
+  );
+
+  const onUploadFiles = useCallback(async (files: File[]) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    console.log(
+      "업로드 완료 샘플",
+      files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+    );
+  }, []);
+
+  const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
+  const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
+  const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
+  const onRowClick = useCallback((rows: unknown) => console.log("rowClick", rows), []);
 
   return (
     <div>
-      <div style={{ width: "700px", height: "600px", display: "flex", flexDirection: "column", background:'red' }}>
+      <div style={{ width: "700px", height: "600px", display: "flex", flexDirection: "column", background: "red" }}>
         <JsExcelGrid
           data={data}
           onHeaderSave={onHeaderSave}

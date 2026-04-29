@@ -598,8 +598,8 @@ export default function JsGridTable(props: Props) {
                                               ? "clip"
                                               : "ellipsis",
                                     textAlign: isCheckbox ? "center" : isRowNum ? "right" : undefined,
-                                    paddingRight: isCheckbox ? undefined : 14,
-                                    paddingLeft: isCheckbox ? undefined : isRowNum ? undefined : 14,
+                                    paddingRight: isCheckbox ? undefined : 10,
+                                    paddingLeft: isCheckbox ? undefined : isRowNum ? undefined : 10,
                                     cursor: isCheckbox && props.rowSelection ? "pointer" : undefined,
                                     flexShrink: 0,
                                     ...props.getStickyStyle({ colIndex: cdex, isHeader: false }),
