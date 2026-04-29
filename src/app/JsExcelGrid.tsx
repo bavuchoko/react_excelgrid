@@ -275,7 +275,6 @@ const JsExcelGrid =(props:GridType)=> {
                     enablePseudoFullscreen={enablePseudoFullscreen}
                     onDownLoadClick={props.onDownloadClick}
                     onUploadClick={props.onUploadClick}
-                    onCreateClick={props.onCreateClick}
                     onTrashClick={
                         props.onDeleteClick
                             ? () => {

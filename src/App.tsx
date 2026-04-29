@@ -48,21 +48,14 @@ const App = () => {
     [pageNumber],
   );
 
-  const [data, setData] = useState<ExcelGridData>(() => {
-    const sheet1 = {
-      id: "sheet-1",
-      name: "Sheet 1",
+  const [data, setData] = useState<ExcelGridData>(() => ({
+    sheets: Array.from({ length: 12 }, (_, i) => ({
+      id: `sheet-${i + 1}`,
+      name: `Sheet ${i + 1}`,
       header: [] as Header[],
       content: [] as any[],
-    };
-    const sheet2 = {
-      id: "sheet-2",
-      name: "Sheet 2",
-      header: [] as Header[],
-      content: [] as any[],
-    };
-    return { sheets: [sheet1, sheet2] };
-  });
+    })),
+  }));
 
   // 서버는 성공 여부만 내려준다고 가정
   const saveHeaderApi = useCallback(async (_payload: SheetHeaderSavePayload) => {
@@ -89,7 +82,6 @@ const App = () => {
   const onUploadClick = useCallback(() => console.log("upload clicked"), []);
   const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
   const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
-  const onCreateClick = useCallback(() => console.log("create"), []);
   const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
   const onRowClick = useCallback((rows: unknown) => console.log("rowClick", rows), []);
 
@@ -99,12 +91,25 @@ const App = () => {
     setData((prev) => ({
       ...prev,
       sheets: prev.sheets.map((s) => {
-        const nextContent =
-          s.id === "sheet-2"
-            ? allRows.map((r) => ({ ...r, title: `두번째 시트 - ${String((r as any).title ?? "")}` }))
-            : allRows;
+        const m = /^sheet-(\d+)$/.exec(s.id);
+        const sheetNum = m ? Number(m[1]) : 1;
+        /** 시트마다 같은 `allRows` 베이스를 쓰되, 행 id·표시 문자열은 시트 번호별로 구분 */
+        const nextContent = allRows.map((r, rowIdx) => ({
+          ...r,
+          id: sheetNum * PAGE_SIZE + rowIdx + 1,
+          title:
+            sheetNum === 2
+              ? `두번째 시트 · ${String((r as { title?: string }).title ?? "")}`
+              : `Sheet ${sheetNum} · 행 ${rowIdx + 1}`,
+          number: `${100 + sheetNum}-${String(rowIdx + 1).padStart(3, "0")}`,
+          creator: {
+            name: sheetNum === 1 ? "등록자" : `등록자(시트${sheetNum})`,
+          },
+          category: {
+            name: ["네트워크", "서버", "보안", "앱"][sheetNum % 4],
+          },
+        }));
 
-        // 초기 1회: header가 비어있으면 기본 header로 채워준다.
         const nextHeader = s.header.length === 0 ? header : s.header;
         return { ...s, header: nextHeader, content: nextContent };
       }),
@@ -114,14 +119,13 @@ const App = () => {
 
   return (
     <div>
-      <div style={{ width: "700px", height: "800px", display: "flex", flexDirection: "column", background:'red' }}>
+      <div style={{ width: "700px", height: "600px", display: "flex", flexDirection: "column", background:'red' }}>
         <JsExcelGrid
           data={data}
           onHeaderSave={onHeaderSave}
           onUploadClick={onUploadClick}
           onHeaderReset={onHeaderReset}
           onDownloadClick={onDownloadClick}
-          onCreateClick={onCreateClick}
           onDeleteClick={onDeleteClick}
           onRowClick={onRowClick}
         />

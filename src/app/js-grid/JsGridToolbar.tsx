@@ -3,7 +3,6 @@ import Fields from "../resources/icon/Fields.tsx";
 import Expand from "../resources/icon/Expand.tsx";
 import Shrink from "../resources/icon/Shrink.tsx";
 import Trash from "../resources/icon/Trash.tsx";
-import Pencil from "../resources/icon/Pencil.tsx";
 import {ToolbarHint} from "@bavuchoko/js-tooltip";
 import DownLoad from "../resources/icon/DownLoad.tsx";
 import Upload from "../resources/icon/Upload.tsx";
@@ -17,7 +16,6 @@ type Props = {
     enablePseudoFullscreen?: boolean;
     onDownLoadClick?: () => void;
     onUploadClick?: () => void;
-    onCreateClick?: () => void;
     /** 선택된 행 삭제(콜백은 부모에서 `onDelete`와 연결) */
     onTrashClick?: () => void;
     trashDisabled?: boolean;
@@ -32,7 +30,6 @@ export default function JsGridToolbar({
     enablePseudoFullscreen,
     onDownLoadClick,
     onUploadClick,
-    onCreateClick,
     onTrashClick,
     trashDisabled,
     style,
@@ -49,18 +46,6 @@ export default function JsGridToolbar({
                 </div>
 
                 <div style={{display: 'flex', alignItems:'center', gap:'16px', justifyContent:'end'}}>
-
-                {onCreateClick && (
-                    <>
-                        <ToolbarHint text="새 데이터 추가">
-                            <Pencil
-                                style={{ width: '18px', cursor: 'pointer' }}
-                                onClick={() => onCreateClick()}
-                            />
-                        </ToolbarHint>
-
-                    </>
-                )}
 
                 {(onUploadClick || onDownLoadClick) && (
                     <>
