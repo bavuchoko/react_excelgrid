@@ -582,6 +582,10 @@ export default function JsGridTable(props: Props) {
                                           }),
                                     boxSizing: "border-box",
                                     whiteSpace: "nowrap",
+                                    // 셀(데이터 영역) 내부 컨텐츠를 세로 중앙 정렬
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: isCheckbox ? "center" : isRowNum ? "flex-end" : undefined,
                                     /** 헤더 측으로 열 폭이 잠기면 데이터가 길어도 칸 안에 말줄임(넘김 금지) */
                                     overflow:
                                         isCheckbox || isRowNum

@@ -547,6 +547,9 @@ export default function JsExcelGrid(props: GridType) {
                             alignItems: "center",
                             justifyContent: "center",
                             background: "rgba(255,255,255,0.35)",
+                            // 데이터 영역에 블러 효과(배경/하위 요소를 블러 처리)
+                            backdropFilter: "blur(6px)",
+                            WebkitBackdropFilter: "blur(6px)",
                             zIndex: 3,
                             pointerEvents: "none",
                         }}
