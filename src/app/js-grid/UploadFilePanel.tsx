@@ -184,6 +184,11 @@ export default function UploadFilePanel(props: Props) {
 
         setIsUploading(true);
         onBusyChange?.(true);
+        await new Promise<void>((resolve) => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => resolve());
+            });
+        });
         try {
             await Promise.resolve(onUploadConfirm(filesPayload));
             resetAll();

@@ -1,4 +1,5 @@
 import type {CSSProperties, MouseEvent, RefObject} from "react";
+import {useId} from "react";
 import Fields from "../resources/icon/Fields.tsx";
 import Expand from "../resources/icon/Expand.tsx";
 import Shrink from "../resources/icon/Shrink.tsx";
@@ -18,6 +19,8 @@ type Props = {
     uploadBtnRef?: RefObject<HTMLDivElement | null>;
     /** 업로드 아이콘 클릭 — 부모에서 첨부 패널 표시 여부 등 처리 */
     onToggleUploadPanel?: (e: MouseEvent) => void;
+    /** 패널에서 업로드 요청 처리 중일 때 툴바에 로딩 표시 */
+    uploadBusy?: boolean;
     /** 선택된 행 삭제(콜백은 부모에서 `onDelete`와 연결) */
     onTrashClick?: () => void;
     trashDisabled?: boolean;
@@ -33,14 +36,24 @@ export default function JsGridToolbar({
     onDownLoadClick,
     uploadBtnRef,
     onToggleUploadPanel,
+    uploadBusy,
     onTrashClick,
     trashDisabled,
     style,
 }: Props) {
     const showPseudoFullscreen = enablePseudoFullscreen !== false;
+    const uploadSpinClass = useId().replace(/:/g, "");
 
     return (
-        <div style={{backgroundColor:'#f8f8f8', padding: '6px 12px', borderBottom: `1px solid #bdc2c9`, ...style}}>
+        <div style={{backgroundColor:'#f8f8f8', padding: '6px 12px', borderBottom: `1px solid #bdc2c9`, userSelect: "none", cursor: "default", ...style}}>
+            <style>{`
+                @keyframes jsgrid-toolbar-spin-${uploadSpinClass} {
+                    to { transform: rotate(360deg); }
+                }
+                .jsgrid-toolbar-spin-dot-${uploadSpinClass} {
+                    animation: jsgrid-toolbar-spin-${uploadSpinClass} 0.75s linear infinite;
+                }
+            `}</style>
             <div style={{display: 'flex', alignItems:'center', justifyContent:'space-between'}}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <ToolbarHint text="틀 고정 : alt + 헤더 클릭">
@@ -53,13 +66,54 @@ export default function JsGridToolbar({
                 {(onToggleUploadPanel || onDownLoadClick) && (
                     <>
                         {onToggleUploadPanel && uploadBtnRef && (
-                            <ToolbarHint text="업로드">
+                            <ToolbarHint text={uploadBusy ? "업로드 중…" : "업로드"}>
                                 <div
                                     ref={uploadBtnRef}
-                                    style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}
-                                    onClick={(e) => onToggleUploadPanel(e)}
+                                    style={{
+                                        position: "relative",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        width: 18,
+                                        height: 18,
+                                        cursor: uploadBusy ? "wait" : "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                        if (uploadBusy) {
+                                            e.stopPropagation();
+                                            return;
+                                        }
+                                        onToggleUploadPanel(e);
+                                    }}
                                 >
-                                    <Upload style={{ width: "18px", cursor: "pointer" }} />
+                                    <Upload
+                                        style={{
+                                            width: "18px",
+                                            cursor: uploadBusy ? "wait" : "pointer",
+                                            opacity: uploadBusy ? 0.35 : 1,
+                                            flexShrink: 0,
+                                        }}
+                                        aria-busy={uploadBusy ?? false}
+                                        aria-live={uploadBusy ? "polite" : undefined}
+                                    />
+                                    {uploadBusy ? (
+                                        <span
+                                            className={`jsgrid-toolbar-spin-dot-${uploadSpinClass}`}
+                                            style={{
+                                                position: "absolute",
+                                                inset: 0,
+                                                margin: "auto",
+                                                width: 14,
+                                                height: 14,
+                                                borderRadius: "50%",
+                                                border: "2px solid #e5e7eb",
+                                                borderTopColor: "#2563eb",
+                                                boxSizing: "border-box",
+                                                pointerEvents: "none",
+                                            }}
+                                            aria-hidden
+                                        />
+                                    ) : null}
                                 </div>
                             </ToolbarHint>
                         )}

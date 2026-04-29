@@ -328,6 +328,7 @@ const JsExcelGrid =(props:GridType)=> {
                     onDownLoadClick={props.onDownloadClick}
                     uploadBtnRef={props.onUploadFiles ? uploadBtnRef : undefined}
                     onToggleUploadPanel={props.onUploadFiles ? toggleUploadPanel : undefined}
+                    uploadBusy={props.onUploadFiles ? uploadPanelBusy : undefined}
                     onTrashClick={
                         props.onDeleteClick
                             ? () => {
