@@ -189,7 +189,7 @@ export default function JsGridToolbar({
                                             height: 14,
                                             borderRadius: "50%",
                                             border: "2px solid #e5e7eb",
-                                            borderTopColor: "#2563eb",
+                                            borderTopColor: "#ef4444",
                                             boxSizing: "border-box",
                                             pointerEvents: "none",
                                         }}
