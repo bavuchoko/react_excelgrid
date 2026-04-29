@@ -28,8 +28,12 @@ export type GridType ={
     /** 컬럼 설정 메뉴에서 "초기화" 클릭 시 호출된다. */
     onHeaderReset?: () => void
     onDownloadClick?: () => void
-    /** 전달 시 툴바에 업로드 아이콘이 표시되고, 클릭 시 호출된다. */
-    onUploadClick?: () => void
+    /** 전달 시 툴바에 업로드 아이콘이 표시된다. 패널에서 목록 확인 후 업로드 버튼 클릭 시 한 번 호출된다. resolve 시 패널이 닫힌다. 오류 처리를 위해 거부(reject) 시 패널에 오류 텍스트를 보여 줄 수 있다. */
+    onUploadFiles?: (files: File[]) => void | Promise<void>
+    /** 업로드에 쓸 `<input type="file">` 의 `accept`. 생략 시 Excel(.xlsx·.xls·.xlsm 등) 허용 기본 문자열 사용. */
+    uploadAccept?: string
+    /** `true` 일 때 파일 여러 건 선택/병합(기본 `false`: 한 번에 하나). */
+    uploadMultiple?: boolean
     /** 체크박스를 제외한 행 클릭 시 호출된다. */
     onRowClick?: (row: unknown) => void
     /** 전달 시 행 왼쪽에 체크박스·툴바 휴지통이 표시되고, 선택된 행의 "데이터 객체" 배열로 호출된다(1건이어도 배열). */

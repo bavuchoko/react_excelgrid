@@ -228,17 +228,28 @@ export default function JsGridTable(props: Props) {
 
     return (
         <div ref={scrollRef} style={{ overflow: "auto", flex: 1, minHeight: 0 }}>
-            <table
-                ref={headTableRef}
+            {/** thead만 있는 table과 가상 행 영역이 형제라, 세로 헤더 고정은 table을 sticky 래퍼로 두는 편이 안정적 */}
+            <div
                 style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 10,
                     width: "max-content",
-                    /** min-width보다 명시 width를 안정적으로 쓰도록 */
-                    tableLayout: "fixed",
-                    borderCollapse: "separate",
-                    borderSpacing: 0,
+                    minWidth: "100%",
+                    backgroundColor: "#f8f8f8",
                 }}
             >
-                <thead style={{ backgroundColor: "#f8f8f8" }}>
+                <table
+                    ref={headTableRef}
+                    style={{
+                        width: "max-content",
+                        /** min-width보다 명시 width를 안정적으로 쓰도록 */
+                        tableLayout: "fixed",
+                        borderCollapse: "separate",
+                        borderSpacing: 0,
+                    }}
+                >
+                    <thead style={{ backgroundColor: "#f8f8f8" }}>
                     <tr>
                         {props.columns.map((column, cdex) => {
                             const isRowNum = Boolean(column.__rownum__);
@@ -452,14 +463,16 @@ export default function JsGridTable(props: Props) {
                                 </th>
                             );
                         })}
-                    </tr>
-                </thead>
-            </table>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
 
             <div
                 role="rowgroup"
                 style={{
                     position: "relative",
+                    zIndex: 0,
                     width: totalGridWidth > 0 ? totalGridWidth : undefined,
                     minWidth: "max-content",
                     height: `${rowVirtualizer.getTotalSize()}px`,
@@ -644,6 +657,25 @@ export default function JsGridTable(props: Props) {
                     );
                 })}
             </div>
+            {props.data.length === 0 && colsLen > 0 ? (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    style={{
+                        boxSizing: "border-box",
+                        width: totalGridWidth > 0 ? totalGridWidth : "100%",
+                        minWidth: "max-content",
+                        minHeight: 120,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#64748b",
+                        fontSize: 13,
+                    }}
+                >
+                    데이터가 없습니다.
+                </div>
+            ) : null}
         </div>
     );
 }

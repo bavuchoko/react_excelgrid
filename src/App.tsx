@@ -3,6 +3,9 @@ import type { ExcelGridData, Header, SheetHeaderSavePayload } from "./app/index.
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const PAGE_SIZE = 15;
+/** 더미: 시트별 행 수(스크롤/가상화 확인용) */
+const SHEET3_DUMMY_ROW_COUNT = 50;
+const SHEET4_DUMMY_ROW_COUNT = 1500;
 
 const MyCell = (props: any) => (
   <span onClick={() => console.log(props.value)}>
@@ -79,7 +82,14 @@ const App = () => {
     }));
   }, [saveHeaderApi]);
 
-  const onUploadClick = useCallback(() => console.log("upload clicked"), []);
+  const onUploadFiles = useCallback(async (files: File[]) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    console.log(
+      "업로드 완료 샘플",
+      files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+    );
+  }, []);
+
   const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
   const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
   const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
@@ -93,22 +103,34 @@ const App = () => {
       sheets: prev.sheets.map((s) => {
         const m = /^sheet-(\d+)$/.exec(s.id);
         const sheetNum = m ? Number(m[1]) : 1;
-        /** 시트마다 같은 `allRows` 베이스를 쓰되, 행 id·표시 문자열은 시트 번호별로 구분 */
-        const nextContent = allRows.map((r, rowIdx) => ({
-          ...r,
-          id: sheetNum * PAGE_SIZE + rowIdx + 1,
-          title:
-            sheetNum === 2
-              ? `두번째 시트 · ${String((r as { title?: string }).title ?? "")}`
-              : `Sheet ${sheetNum} · 행 ${rowIdx + 1}`,
-          number: `${100 + sheetNum}-${String(rowIdx + 1).padStart(3, "0")}`,
-          creator: {
-            name: sheetNum === 1 ? "등록자" : `등록자(시트${sheetNum})`,
-          },
-          category: {
-            name: ["네트워크", "서버", "보안", "앱"][sheetNum % 4],
-          },
-        }));
+        /** 시트 2: 빈 시트 테스트. 시트 3·4: 행 수 확장 더미. 그 외: PAGE_SIZE 행 */
+        const rowCount =
+          sheetNum === 2
+            ? 0
+            : sheetNum === 3
+              ? SHEET3_DUMMY_ROW_COUNT
+              : sheetNum === 4
+                ? SHEET4_DUMMY_ROW_COUNT
+                : PAGE_SIZE;
+        const numPad = Math.max(3, String(rowCount).length);
+        const nextContent =
+          rowCount === 0
+            ? []
+            : Array.from({ length: rowCount }, (_, rowIdx) => {
+                const r = allRows[rowIdx % allRows.length];
+                return {
+                  ...r,
+                  id: sheetNum * PAGE_SIZE + rowIdx + 1,
+                  title: `Sheet ${sheetNum} · 행 ${rowIdx + 1}`,
+                  number: `${100 + sheetNum}-${String(rowIdx + 1).padStart(numPad, "0")}`,
+                  creator: {
+                    name: sheetNum === 1 ? "등록자" : `등록자(시트${sheetNum})`,
+                  },
+                  category: {
+                    name: ["네트워크", "서버", "보안", "앱"][sheetNum % 4],
+                  },
+                };
+              });
 
         const nextHeader = s.header.length === 0 ? header : s.header;
         return { ...s, header: nextHeader, content: nextContent };
@@ -123,7 +145,7 @@ const App = () => {
         <JsExcelGrid
           data={data}
           onHeaderSave={onHeaderSave}
-          onUploadClick={onUploadClick}
+          onUploadFiles={onUploadFiles}
           onHeaderReset={onHeaderReset}
           onDownloadClick={onDownloadClick}
           onDeleteClick={onDeleteClick}

@@ -6,6 +6,8 @@ import {computeLeftOffsets, getColumnFreezeStickyStyle} from "./js-grid/columnLa
 import {GRID_BORDER} from "./js-grid/gridStyles.ts";
 import JsGridTable from "./js-grid/JsGridTable.tsx";
 import JsGridToolbar from "./js-grid/JsGridToolbar.tsx";
+import { DEFAULT_EXCEL_UPLOAD_ACCEPT } from "./js-grid/excelUploadConstraints.ts";
+import UploadFilePanel from "./js-grid/UploadFilePanel.tsx";
 import {useColumnWidths} from "./js-grid/useColumnWidths.ts";
 import {useFreezeColumns} from "./js-grid/useFreezeColumns.ts";
 import SheetTabs from "./js-grid/SheetTabs.tsx";
@@ -135,7 +137,28 @@ const JsExcelGrid =(props:GridType)=> {
     const [isFieldsMenuOpen, setIsFieldsMenuOpen] = useState(false);
     const [fieldsMenuPos, setFieldsMenuPos] = useState<{ top: number; right: number } | null>(null);
     const fieldsBtnRef = useRef<HTMLDivElement | null>(null);
+    const uploadBtnRef = useRef<HTMLDivElement | null>(null);
     const dragKeyRef = useRef<string | null>(null);
+
+    const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
+    const [uploadPanelPos, setUploadPanelPos] = useState<{ top: number; right: number } | null>(null);
+    const [uploadPanelBusy, setUploadPanelBusy] = useState(false);
+
+    const toggleUploadPanel = useCallback((e: { stopPropagation: () => void }) => {
+        e.stopPropagation();
+        if (uploadPanelBusy) return;
+        setIsFieldsMenuOpen(false);
+        const rect = uploadBtnRef.current?.getBoundingClientRect();
+        if (rect) {
+            setUploadPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+        }
+        setIsUploadPanelOpen((v) => !v);
+    }, [uploadPanelBusy]);
+
+    const handleUploadConfirm = useCallback(
+        (files: File[]) => Promise.resolve(props.onUploadFiles?.(files)),
+        [props.onUploadFiles],
+    );
 
     useEffect(() => {
         if (!isFieldsMenuOpen) return;
@@ -157,6 +180,35 @@ const JsExcelGrid =(props:GridType)=> {
             window.removeEventListener('keydown', onKey);
         };
     }, [isFieldsMenuOpen]);
+
+    useEffect(() => {
+        if (!isUploadPanelOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (uploadPanelBusy) return;
+
+            const target = e.target as Node | null;
+            if (!target) return;
+
+            if (uploadBtnRef.current?.contains(target)) return;
+            const panelEl = document.querySelector('[data-jsgrid-upload-panel="1"]');
+            if (panelEl && panelEl.contains(target)) return;
+            setIsUploadPanelOpen(false);
+        };
+
+        const onKey = (e: KeyboardEvent) => {
+            if (uploadPanelBusy) return;
+            if (e.key === "Escape") setIsUploadPanelOpen(false);
+        };
+
+        window.addEventListener("mousedown", onDown);
+        window.addEventListener("keydown", onKey);
+
+        return () => {
+            window.removeEventListener("mousedown", onDown);
+            window.removeEventListener("keydown", onKey);
+        };
+
+    }, [isUploadPanelOpen, uploadPanelBusy]);
 
     const { freezeUntilIndex, setFreezeUntilIndex } = useFreezeColumns(columns.length);
     const { headerCellRefs, colWidthByKey, measuredWidthByKey, setColumnWidth } = useColumnWidths(
@@ -274,7 +326,8 @@ const JsExcelGrid =(props:GridType)=> {
                     isPseudoFullscreen={isPseudoFullscreen}
                     enablePseudoFullscreen={enablePseudoFullscreen}
                     onDownLoadClick={props.onDownloadClick}
-                    onUploadClick={props.onUploadClick}
+                    uploadBtnRef={props.onUploadFiles ? uploadBtnRef : undefined}
+                    onToggleUploadPanel={props.onUploadFiles ? toggleUploadPanel : undefined}
                     onTrashClick={
                         props.onDeleteClick
                             ? () => {
@@ -290,6 +343,8 @@ const JsExcelGrid =(props:GridType)=> {
                     trashDisabled={selectedRowIndexes.size === 0}
                     onToggleFieldsMenu={(e) => {
                         e.stopPropagation();
+                        if (uploadPanelBusy) return;
+                        setIsUploadPanelOpen(false);
                         const rect = fieldsBtnRef.current?.getBoundingClientRect();
                         if (rect) {
                             setFieldsMenuPos({
@@ -302,12 +357,27 @@ const JsExcelGrid =(props:GridType)=> {
                     onTogglePseudoFullscreen={() => setIsPseudoFullscreen(v => !v)}
                 />
 
+                {props.onUploadFiles ? (
+                    <UploadFilePanel
+                        open={isUploadPanelOpen}
+                        pos={uploadPanelPos}
+                        accept={props.uploadAccept ?? DEFAULT_EXCEL_UPLOAD_ACCEPT}
+                        multiple={props.uploadMultiple ?? false}
+                        onBusyChange={setUploadPanelBusy}
+                        onUploadConfirm={handleUploadConfirm}
+                        onClose={() => setIsUploadPanelOpen(false)}
+                    />
+                ) : null}
+
                 <SheetTabs
                     sheets={sheets}
                     activeIndex={safeActiveIndex}
                     onChange={(idx) => {
+                        if (uploadPanelBusy) return;
                         const nextSheet = sheets[idx];
                         if (!nextSheet) return;
+                        setIsUploadPanelOpen(false);
+
                         // 시트 전환 전에 현재 시트의 "진행중 설정"을 저장
                         if (activeId) {
                             setSheetColumnState((prev) => ({
@@ -384,23 +454,42 @@ const JsExcelGrid =(props:GridType)=> {
                     }}
                 />
 
-                <JsGridTable
-                    columns={columns}
-                    data={data}
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    headerCellRefs={headerCellRefs}
-                    colWidthByKey={colWidthByKey}
-                    onColumnWidthChange={setColumnWidth}
-                    setFreezeUntilIndex={setFreezeUntilIndex}
-                    getStickyStyle={getStickyStyle}
-                    rowSelection={rowSelection}
-                    onRowClick={props.onRowClick}
-                    onSortChange={(next) => {
-                        setSortKey(next.key);
-                        setSortDir(next.direction);
-                    }}
-                />
+                {sheets.length === 0 ? (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        style={{
+                            flex: 1,
+                            minHeight: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#64748b",
+                            fontSize: 13,
+                            backgroundColor: "#ffffff",
+                        }}
+                    >
+                        데이터가 없습니다.
+                    </div>
+                ) : (
+                    <JsGridTable
+                        columns={columns}
+                        data={data}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                        headerCellRefs={headerCellRefs}
+                        colWidthByKey={colWidthByKey}
+                        onColumnWidthChange={setColumnWidth}
+                        setFreezeUntilIndex={setFreezeUntilIndex}
+                        getStickyStyle={getStickyStyle}
+                        rowSelection={rowSelection}
+                        onRowClick={props.onRowClick}
+                        onSortChange={(next) => {
+                            setSortKey(next.key);
+                            setSortDir(next.direction);
+                        }}
+                    />
+                )}
             </div>
     );
 }

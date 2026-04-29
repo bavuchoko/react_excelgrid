@@ -15,7 +15,9 @@ type Props = {
     isPseudoFullscreen: boolean;
     enablePseudoFullscreen?: boolean;
     onDownLoadClick?: () => void;
-    onUploadClick?: () => void;
+    uploadBtnRef?: RefObject<HTMLDivElement | null>;
+    /** 업로드 아이콘 클릭 — 부모에서 첨부 패널 표시 여부 등 처리 */
+    onToggleUploadPanel?: (e: MouseEvent) => void;
     /** 선택된 행 삭제(콜백은 부모에서 `onDelete`와 연결) */
     onTrashClick?: () => void;
     trashDisabled?: boolean;
@@ -29,7 +31,8 @@ export default function JsGridToolbar({
     isPseudoFullscreen,
     enablePseudoFullscreen,
     onDownLoadClick,
-    onUploadClick,
+    uploadBtnRef,
+    onToggleUploadPanel,
     onTrashClick,
     trashDisabled,
     style,
@@ -47,14 +50,17 @@ export default function JsGridToolbar({
 
                 <div style={{display: 'flex', alignItems:'center', gap:'16px', justifyContent:'end'}}>
 
-                {(onUploadClick || onDownLoadClick) && (
+                {(onToggleUploadPanel || onDownLoadClick) && (
                     <>
-                        {onUploadClick && (
+                        {onToggleUploadPanel && uploadBtnRef && (
                             <ToolbarHint text="업로드">
-                                <Upload
-                                    style={{width: '18px', cursor: 'pointer'}}
-                                    onClick={() => onUploadClick()}
-                                />
+                                <div
+                                    ref={uploadBtnRef}
+                                    style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}
+                                    onClick={(e) => onToggleUploadPanel(e)}
+                                >
+                                    <Upload style={{ width: "18px", cursor: "pointer" }} />
+                                </div>
                             </ToolbarHint>
                         )}
                         {onDownLoadClick && (
