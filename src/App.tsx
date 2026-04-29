@@ -1,4 +1,8 @@
-import { JsExcelGrid, applyHeaderStateToHeader } from "./app/index.ts";
+import {
+    JsExcelGrid,
+    applyHeaderStateToExcelGridData,
+    removeRowsByIdsFromExcelGridData
+} from "./app/index.ts";
 import type { ExcelGridData, Header, SheetHeaderSavePayload } from "./app/index.ts";
 import { useCallback, useMemo, useState } from "react";
 
@@ -8,6 +12,7 @@ const SHEET3_DUMMY_ROW_COUNT = 50;
 const SHEET4_DUMMY_ROW_COUNT = 1500;
 
 const SHEET_COUNT = 12;
+const SHEET_ROW_ID_MULTIPLIER = 1_000_000;
 
 const MyCell = (props: { value?: unknown; rowIndex?: number }) => (
   <span onClick={() => console.log(props.value)}>
@@ -53,16 +58,11 @@ const App = () => {
     [pageNumber],
   );
 
-  /** 저장된 시트만 키 존재 · 없거나 비면 UI용 `header` 템플릿 사용 */
-  const [headerBySheetId, setHeaderBySheetId] = useState<Record<string, Header[]>>({});
-
-  const data: ExcelGridData = useMemo(() => {
+  const initialData = useMemo<ExcelGridData>(() => {
     return {
       sheets: Array.from({ length: SHEET_COUNT }, (_, i) => {
         const sheetNum = i + 1;
         const id = `sheet-${sheetNum}`;
-        const saved = headerBySheetId[id];
-        const sheetHeader = saved?.length ? saved : header;
 
         const rowCount =
           sheetNum === 2
@@ -80,7 +80,7 @@ const App = () => {
                 const r = allRows[rowIdx % allRows.length];
                 return {
                   ...r,
-                  id: sheetNum * PAGE_SIZE + rowIdx + 1,
+                  id: sheetNum * SHEET_ROW_ID_MULTIPLIER + rowIdx + 1,
                   title: `Sheet ${sheetNum} · 행 ${rowIdx + 1}`,
                   number: `${100 + sheetNum}-${String(rowIdx + 1).padStart(numPad, "0")}`,
                   creator: {
@@ -99,36 +99,37 @@ const App = () => {
         return {
           id,
           name: `Sheet ${sheetNum}`,
-          header: sheetHeader,
+          header,
           content: nextContent,
         };
       }),
     };
-  }, [allRows, header, headerBySheetId]);
+  }, [allRows, header]);
 
-  const saveHeaderApi = useCallback(async (payload: SheetHeaderSavePayload) => {
-    void payload;
+  const [data, setData] = useState<ExcelGridData>(initialData);
+
+  // api요청 테스트용 헤더 저장 메서드
+  const headerApi = useCallback(async (payload: SheetHeaderSavePayload) => {
+    console.log("header 저장 요청", payload.sheetId, payload.headers.length, "건");
     await new Promise((r) => setTimeout(r, 150));
-    return true as const;
   }, []);
+
+  //api요청 테스트용 삭제 메서드
+  const deleteApi = (ids: number[]) =>
+      new Promise<void>((resolve) => {
+          console.log("delete 요청", ids);
+          window.setTimeout(() => resolve(), 1000);
+      });
+
 
   const onHeaderSave = useCallback(
     async (payload: SheetHeaderSavePayload) => {
-      const ok = await saveHeaderApi(payload);
-      if (!ok) return;
+      // 실제 연동 시 아래 headerApi 구현만 교체하면 된다.
+      await headerApi(payload);
 
-      setHeaderBySheetId((prev) => {
-        const current = prev[payload.sheetId]?.length ? prev[payload.sheetId]! : header;
-        return {
-          ...prev,
-          [payload.sheetId]: applyHeaderStateToHeader({
-            header: current,
-            state: payload.headers,
-          }),
-        };
-      });
+      setData((prev) => applyHeaderStateToExcelGridData({ data: prev, payload }));
     },
-    [saveHeaderApi, header],
+    [headerApi],
   );
 
   const onUploadFiles = useCallback(async (files: File[]) => {
@@ -141,8 +142,18 @@ const App = () => {
 
   const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
   const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
-  const onDeleteClick = useCallback((rows: unknown) => console.log("delete", rows), []);
-  const onRowClick = useCallback((rows: unknown) => console.log("rowClick", rows), []);
+
+  const onDeleteClick = useCallback(async (rows: unknown[]) => {
+      const ids = rows
+          .map((r) => (r as { id?: unknown }).id)
+          .filter((id): id is number => typeof id === "number" && Number.isFinite(id));
+      if (ids.length === 0) return;
+      await deleteApi(ids);
+
+      setData((prev) => removeRowsByIdsFromExcelGridData({ data: prev, ids }));
+
+      }, []);
+  const onRowClick = useCallback((row: unknown) => console.log("rowClick", row), []);
 
   return (
     <div>

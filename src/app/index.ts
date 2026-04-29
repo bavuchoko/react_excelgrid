@@ -13,5 +13,14 @@ export type { GridType as JsExcelGridProps } from "./type/Type.ts";
 
 export { default as JsExcelGrid } from "./JsExcelGrid.tsx";
 
-export { applyHeaderStateToHeader } from "./utils/applyHeaderState.ts";
+export {
+    applyHeaderStateToHeader,
+    applyHeaderStateToExcelGridData,
+} from "./utils/applyHeaderState.ts";
+export {
+    removeRowsFromExcelGridData,
+    removeRowsByIdsFromExcelGridData,
+    type RemoveRowsByIdsFromExcelGridDataArgs,
+    type RemoveRowsFromExcelGridDataArgs,
+} from "./utils/removeRowsFromExcelGridData.ts";
 

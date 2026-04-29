@@ -36,8 +36,12 @@ export type GridType ={
     uploadMultiple?: boolean
     /** 체크박스를 제외한 행 클릭 시 호출된다. */
     onRowClick?: (row: unknown) => void
-    /** 전달 시 행 왼쪽에 체크박스·툴바 휴지통이 표시되고, 선택된 행의 "데이터 객체" 배열로 호출된다(1건이어도 배열). */
-    onDeleteClick?: (rows: unknown[]) => void
+    /**
+     * 전달 시 행 왼쪽에 체크박스·툴바 휴지통이 표시되고, 선택된 행의 "데이터 객체" 배열로 호출된다(1건이어도 배열).
+     * API 삭제 성공 후 `removeRowsFromExcelGridData({ data, sheetId, removedRows })`로 `data`를 갱신하면 된다.
+     * 비동기 삭제 시 `Promise`를 반환하면 응답까지 삭제 로딩 UI가 유지된다.
+     */
+    onDeleteClick?: (rows: unknown[]) => void | Promise<void>
     /** false면 전체화면(pseudo fullscreen) 토글 UI/동작을 비활성화한다. (기본값: true) */
     enablePseudoFullscreen?: boolean
     style?: CSSProperties

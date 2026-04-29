@@ -21,8 +21,10 @@ type Props = {
     onToggleUploadPanel?: (e: MouseEvent) => void;
     /** 패널에서 업로드 요청 처리 중일 때 툴바에 로딩 표시 */
     uploadBusy?: boolean;
+    /** 삭제 API 응답 대기 중 휴지통 로딩 표시 */
+    deleteBusy?: boolean;
     /** 선택된 행 삭제(콜백은 부모에서 `onDelete`와 연결) */
-    onTrashClick?: () => void;
+    onTrashClick?: () => void | Promise<void>;
     trashDisabled?: boolean;
     style?: CSSProperties;
 };
@@ -37,6 +39,7 @@ export default function JsGridToolbar({
     uploadBtnRef,
     onToggleUploadPanel,
     uploadBusy,
+    deleteBusy,
     onTrashClick,
     trashDisabled,
     style,
@@ -132,18 +135,68 @@ export default function JsGridToolbar({
 
                 {onTrashClick && (
                     <>
-                        <ToolbarHint text={trashDisabled ? "삭제할 행을 선택하세요" : "선택 항목 삭제"}>
-                            <Trash
+                        <ToolbarHint
+                            text={
+                                deleteBusy
+                                    ? "삭제 중…"
+                                    : trashDisabled
+                                      ? "삭제할 행을 선택하세요"
+                                      : "선택 항목 삭제"
+                            }
+                        >
+                            <div
                                 style={{
-                                    width: '18px',
-                                    cursor: trashDisabled ? 'not-allowed' : 'pointer',
-                                    opacity: trashDisabled ? 0.45 : 1,
+                                    position: "relative",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    width: 18,
+                                    height: 18,
+                                    cursor:
+                                        deleteBusy || uploadBusy ? "wait" : trashDisabled ? "not-allowed" : "pointer",
                                 }}
-                                onClick={() => {
-                                    if (trashDisabled) return;
-                                    onTrashClick();
+                                onClick={(e) => {
+                                    if (trashDisabled || uploadBusy) {
+                                        e.stopPropagation();
+                                        return;
+                                    }
+                                    void Promise.resolve(onTrashClick());
                                 }}
-                            />
+                            >
+                                <Trash
+                                    style={{
+                                        width: "18px",
+                                        cursor:
+                                            deleteBusy || uploadBusy
+                                                ? "wait"
+                                                : trashDisabled
+                                                  ? "not-allowed"
+                                                  : "pointer",
+                                        opacity:
+                                            deleteBusy || uploadBusy ? 0.35 : trashDisabled ? 0.45 : 1,
+                                    }}
+                                    aria-busy={Boolean(deleteBusy)}
+                                    aria-live={deleteBusy ? "polite" : undefined}
+                                />
+                                {deleteBusy ? (
+                                    <span
+                                        className={`jsgrid-toolbar-spin-dot-${uploadSpinClass}`}
+                                        style={{
+                                            position: "absolute",
+                                            inset: 0,
+                                            margin: "auto",
+                                            width: 14,
+                                            height: 14,
+                                            borderRadius: "50%",
+                                            border: "2px solid #e5e7eb",
+                                            borderTopColor: "#2563eb",
+                                            boxSizing: "border-box",
+                                            pointerEvents: "none",
+                                        }}
+                                        aria-hidden
+                                    />
+                                ) : null}
+                            </div>
                         </ToolbarHint>
 
                     </>

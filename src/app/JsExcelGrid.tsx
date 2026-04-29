@@ -157,17 +157,18 @@ export default function JsExcelGrid(props: GridType) {
     const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
     const [uploadPanelPos, setUploadPanelPos] = useState<{ top: number; right: number } | null>(null);
     const [uploadPanelBusy, setUploadPanelBusy] = useState(false);
+    const [deleteBusy, setDeleteBusy] = useState(false);
 
     const toggleUploadPanel = useCallback((e: { stopPropagation: () => void }) => {
         e.stopPropagation();
-        if (uploadPanelBusy) return;
+        if (uploadPanelBusy || deleteBusy) return;
         setIsFieldsMenuOpen(false);
         const rect = uploadBtnRef.current?.getBoundingClientRect();
         if (rect) {
             setUploadPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
         }
         setIsUploadPanelOpen((v) => !v);
-    }, [uploadPanelBusy]);
+    }, [uploadPanelBusy, deleteBusy]);
 
     const handleUploadConfirm = useCallback(
         (files: File[]) => Promise.resolve(props.onUploadFiles?.(files)),
@@ -247,6 +248,17 @@ export default function JsExcelGrid(props: GridType) {
         show: Boolean(props.onDeleteClick),
     }));
 
+    /** 행 수가 줄거나 늘면(삭제·업로드 등) 인덱스 기준 선택은 다음 행에 밀려 잘못 유지되므로 비운다. */
+    const prevSortedLenRef = useRef<number | null>(null);
+    useEffect(() => {
+        const len = sortedData.length;
+        const prev = prevSortedLenRef.current;
+        prevSortedLenRef.current = len;
+        if (prev !== null && prev !== len) {
+            setSelectedRowIndexes(new Set());
+        }
+    }, [sortedData.length]);
+
     const pageRowIds = useMemo(() => {
         // 선택은 `row.id`가 없어도 동작해야 하므로, 현재 페이지의 행 인덱스를 키로 사용한다.
         return sortedData.map((_, idx) => idx);
@@ -292,7 +304,7 @@ export default function JsExcelGrid(props: GridType) {
     }
 
     const rowSelection = useMemo(() => {
-        if (!showDelete) return undefined;
+        if (!showDelete || deleteBusy) return undefined;
         return {
             pageRowIds,
             selectedIds: selectedRowIndexes,
@@ -300,7 +312,24 @@ export default function JsExcelGrid(props: GridType) {
             onToggleAll: toggleSelectAll,
             onToggleRow: toggleSelectRow,
         };
-    }, [showDelete, pageRowIds, selectedRowIndexes, headerChecked, toggleSelectAll, toggleSelectRow]);
+    }, [showDelete, deleteBusy, pageRowIds, selectedRowIndexes, headerChecked, toggleSelectAll, toggleSelectRow]);
+
+    const handleDeleteClick = useCallback(async () => {
+        if (!props.onDeleteClick || deleteBusy) return;
+        const selectedRows = Array.from(selectedRowIndexes)
+            .sort((a, b) => a - b)
+            .map((i) => sortedData[i])
+            .filter((v) => v !== undefined);
+        if (selectedRows.length === 0) return;
+        setDeleteBusy(true);
+        setIsFieldsMenuOpen(false);
+        setIsUploadPanelOpen(false);
+        try {
+            await Promise.resolve(props.onDeleteClick(selectedRows));
+        } finally {
+            setDeleteBusy(false);
+        }
+    }, [props.onDeleteClick, deleteBusy, selectedRowIndexes, sortedData]);
 
     return (
             <div
@@ -342,22 +371,12 @@ export default function JsExcelGrid(props: GridType) {
                     uploadBtnRef={props.onUploadFiles ? uploadBtnRef : undefined}
                     onToggleUploadPanel={props.onUploadFiles ? toggleUploadPanel : undefined}
                     uploadBusy={props.onUploadFiles ? uploadPanelBusy : undefined}
-                    onTrashClick={
-                        props.onDeleteClick
-                            ? () => {
-                                const selectedRows = Array
-                                    .from(selectedRowIndexes)
-                                    .sort((a, b) => a - b)
-                                    .map((i) => sortedData[i])
-                                    .filter((v) => v !== undefined);
-                                props.onDeleteClick?.(selectedRows);
-                            }
-                            : undefined
-                    }
-                    trashDisabled={selectedRowIndexes.size === 0}
+                    deleteBusy={props.onDeleteClick ? deleteBusy : undefined}
+                    onTrashClick={props.onDeleteClick ? handleDeleteClick : undefined}
+                    trashDisabled={selectedRowIndexes.size === 0 || deleteBusy}
                     onToggleFieldsMenu={(e) => {
                         e.stopPropagation();
-                        if (uploadPanelBusy) return;
+                        if (uploadPanelBusy || deleteBusy) return;
                         setIsUploadPanelOpen(false);
                         const rect = fieldsBtnRef.current?.getBoundingClientRect();
                         if (rect) {
@@ -383,11 +402,20 @@ export default function JsExcelGrid(props: GridType) {
                     />
                 ) : null}
 
+                <div
+                    style={{
+                        flex: 1,
+                        minHeight: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        position: "relative",
+                    }}
+                >
                 <SheetTabs
                     sheets={sheets}
                     activeIndex={safeActiveIndex}
                     onChange={(idx) => {
-                        if (uploadPanelBusy) return;
+                        if (uploadPanelBusy || deleteBusy) return;
                         const nextSheet = sheets[idx];
                         if (!nextSheet) return;
                         setIsUploadPanelOpen(false);
@@ -504,6 +532,46 @@ export default function JsExcelGrid(props: GridType) {
                         }}
                     />
                 )}
+
+                {deleteBusy ? (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        aria-busy
+                        aria-label="삭제 중"
+                        style={{
+                            position: "absolute",
+                            inset: 0,
+                            zIndex: 80,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexDirection: "column",
+                            gap: 14,
+                            backgroundColor: "rgba(255, 255, 255, 0.72)",
+                            cursor: "wait",
+                            backdropFilter: "blur(2px)",
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: "50%",
+                                border: "3px solid #e5e7eb",
+                                borderTopColor: "#2563eb",
+                                animation: "jsgrid-delete-spin 0.75s linear infinite",
+                                boxSizing: "border-box",
+                            }}
+                            aria-hidden
+                        />
+                        <style>{`
+                          @keyframes jsgrid-delete-spin { to { transform: rotate(360deg); } }
+                        `}</style>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>삭제 중…</span>
+                    </div>
+                ) : null}
+                </div>
             </div>
     );
 }
