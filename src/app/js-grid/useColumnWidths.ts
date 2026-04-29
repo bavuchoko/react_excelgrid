@@ -1,6 +1,6 @@
 import {useCallback, useLayoutEffect, useRef, useState} from "react";
 import type {JsGridTableColumn} from "../type/Type.ts";
-import {COL_RESIZE_MAX_PX, COL_RESIZE_MIN_PX} from "./gridStyles.ts";
+import {COL_RESIZE_MAX_PX, DEFAULT_DATA_COL_WIDTH_PX} from "./gridStyles.ts";
 
 export function useColumnWidths(
     columns: readonly JsGridTableColumn[],
@@ -15,10 +15,18 @@ export function useColumnWidths(
     const [overrideWidthByKey, setOverrideWidthByKey] = useState<Record<string, number>>({});
     const prevSigRef = useRef<string | null>(null);
 
-    const setColumnWidth = useCallback((columnKey: string, widthPx: number) => {
-        const w = Math.round(Math.max(COL_RESIZE_MIN_PX, Math.min(COL_RESIZE_MAX_PX, widthPx)));
-        setOverrideWidthByKey((prev) => ({ ...prev, [columnKey]: w }));
-    }, []);
+    const normalizeSavedWidthPx = useCallback((v: number): number =>
+        Math.round(
+            Math.min(COL_RESIZE_MAX_PX, Math.max(DEFAULT_DATA_COL_WIDTH_PX, v)),
+        ), []);
+
+    const setColumnWidth = useCallback(
+        (columnKey: string, widthPx: number) => {
+            const w = normalizeSavedWidthPx(widthPx);
+            setOverrideWidthByKey((prev) => ({ ...prev, [columnKey]: w }));
+        },
+        [normalizeSavedWidthPx],
+    );
 
     useLayoutEffect(() => {
         const id = requestAnimationFrame(() => {
@@ -27,15 +35,19 @@ export function useColumnWidths(
 
             // 1) override(저장값) 재적용: headerWidthSig가 바뀌면 persisted 기반으로 리셋
             if (sigChanged) {
-                setOverrideWidthByKey(() => ({ ...persistedWidthByKey }));
+                const next: Record<string, number> = {};
+                for (const [k, v] of Object.entries(persistedWidthByKey)) {
+                    if (v > 0) next[k] = normalizeSavedWidthPx(v);
+                }
+                setOverrideWidthByKey(() => next);
             } else {
                 // persisted가 새로 생긴 경우만 보강 (사용자 드래그 값은 유지)
                 setOverrideWidthByKey((prev) => {
-                    const next = { ...prev };
+                    const nextMap = { ...prev };
                     for (const [k, v] of Object.entries(persistedWidthByKey)) {
-                        if (!(k in next) && v > 0) next[k] = v;
+                        if (!(k in nextMap) && v > 0) nextMap[k] = normalizeSavedWidthPx(v);
                     }
-                    return next;
+                    return nextMap;
                 });
             }
 
@@ -60,7 +72,7 @@ export function useColumnWidths(
             });
         });
         return () => cancelAnimationFrame(id);
-    }, [columns, headerWidthSig, persistedWidthByKey]);
+    }, [columns, headerWidthSig, persistedWidthByKey, normalizeSavedWidthPx]);
 
     return {
         headerCellRefs,

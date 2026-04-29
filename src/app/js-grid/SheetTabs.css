@@ -1,0 +1,10 @@
+/* 가로 스크롤은 유지하고 스크롤바만 숨김 (드래그·휠로 이동) */
+.sheetTabsScroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sheetTabsScroll::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
