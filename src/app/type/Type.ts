@@ -73,17 +73,12 @@ export type GridType = {
     getRowSelectionId?: (row: unknown, rowIndex: number) => string | number | null | undefined
     /**
      * `true`이면 본문 셀 편집 모드를 켠다.
+     * - 클릭: 셀 선택(파란 배경)
      * - 같은 셀 재클릭: `Header.editor` 가 있을 때 편집기 열림
-     * - 붙여넣기(Ctrl+V) 시 `onCellChange` 호출
-     * 셀 클릭 선택은 `cellSelection`(기본 `true`) — `editable` 과 무관.
+     * - 같은 열 세로 드래그: 범위 선택 → 붙여넣기(Ctrl+V) 시 `onCellChange` 호출
      * (기본값: `false`)
      */
     editable?: boolean
-    /**
-     * 본문 셀 클릭·드래그 선택(파란 하이라이트). 기본 `true`.
-     * `editable` 과 별개 — 조회 전용(`editable={false}`)에서도 셀 선택·오류 바 포커스에 사용한다.
-     */
-    cellSelection?: boolean
     /**
      * 본문 셀 값이 **실제로 바뀐 뒤** 호출된다(알림용).
      * 표시 문자열 기준으로 이전 값과 같으면 호출되지 않는다.

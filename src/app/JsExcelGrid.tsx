@@ -16,7 +16,7 @@ import type {
     SheetCellPasteBatch,
     SheetErrorFocusTarget,
 } from "./type/Type.ts";
-import {useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState} from "react";
 import { JsGridToolbarProvider } from "./js-grid/JsGridToolbarContext.tsx";
 import {
     JsGridRowSelectionProvider,
@@ -25,7 +25,8 @@ import {
 import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
 import {
-    columnWidthsToKeyMap,
+    buildColumnLayoutWidths,
+    captureColumnLayoutWidths,
     columnsWidthSignature,
     computeLeftOffsets,
     getColumnFreezeStickyStyle,
@@ -442,11 +443,32 @@ export default function  JsExcelGrid(props: GridType) {
     }, [isFieldsMenuOpen]);
 
     const { freezeUntilIndex, setFreezeUntilIndex } = useFreezeColumns(columns.length);
-    const { headerCellRefs, colWidthByKey, setColumnWidth } = useColumnWidths(
+    const { headerCellRefs, colWidthByKey, measuredWidthByKey, setColumnWidth } = useColumnWidths(
         columns,
         persistedColWidths,
         headerWidthSig,
     );
+    const [frozenLayoutWidths, setFrozenLayoutWidths] = useState<Record<string, number> | null>(
+        null,
+    );
+
+    const handleFreezeColumn = useCallback(
+        (colIndex: number) => {
+            if (freezeUntilIndex === colIndex) {
+                setFreezeUntilIndex(null);
+                setFrozenLayoutWidths(null);
+                return;
+            }
+            setFrozenLayoutWidths(captureColumnLayoutWidths(columns, headerCellRefs));
+            setFreezeUntilIndex(colIndex);
+        },
+        [freezeUntilIndex, columns, headerCellRefs, setFreezeUntilIndex],
+    );
+
+    const columnsWidthSig = useMemo(() => columnsWidthSignature(columns), [columns]);
+    useEffect(() => {
+        setFrozenLayoutWidths(null);
+    }, [columnsWidthSig]);
 
     const applyUserColumnsLayout = useCallback(
         (nextColumns: UserColumn[], widths: Record<string, number> = colWidthByKey) => {
@@ -465,28 +487,17 @@ export default function  JsExcelGrid(props: GridType) {
         applyUserColumnsLayout(userColumns, colWidthByKey);
     }, [activeName, userColumns, colWidthByKey, applyUserColumnsLayout]);
 
-    const [layoutColumnWidths, setLayoutColumnWidths] = useState<readonly number[]>([]);
-    const columnsWidthSig = useMemo(() => columnsWidthSignature(columns), [columns]);
-    useLayoutEffect(() => {
-        setLayoutColumnWidths([]);
-    }, [columnsWidthSig]);
-    const layoutWidthByKey = useMemo(() => {
-        const fromLayout =
-            layoutColumnWidths.length === columns.length
-                ? columnWidthsToKeyMap(columns, layoutColumnWidths)
-                : {};
-        return { ...fromLayout, ...colWidthByKey };
-    }, [columns, layoutColumnWidths, colWidthByKey]);
-    const leftOffsets = useMemo(
-        () => computeLeftOffsets(columns, layoutWidthByKey),
-        [columns, layoutWidthByKey],
+    const layoutWidths = useMemo(
+        () =>
+            freezeUntilIndex != null && frozenLayoutWidths
+                ? frozenLayoutWidths
+                : buildColumnLayoutWidths(columns, measuredWidthByKey, colWidthByKey),
+        [freezeUntilIndex, frozenLayoutWidths, columns, measuredWidthByKey, colWidthByKey],
     );
-
-    const onLayoutColumnWidths = useCallback((widths: readonly number[]) => {
-        setLayoutColumnWidths((prev) =>
-            prev.length === widths.length && prev.every((w, i) => w === widths[i]) ? prev : widths,
-        );
-    }, []);
+    const leftOffsets = useMemo(
+        () => computeLeftOffsets(columns, layoutWidths),
+        [columns, layoutWidths],
+    );
 
     const columnResizable = props.resizable !== false;
 
@@ -734,21 +745,33 @@ export default function  JsExcelGrid(props: GridType) {
      */
     const handleSheetErrorFocus = useCallback(
         (target: SheetErrorFocusTarget) => {
-            const sourceRowIndex = target.rowIndex;
-            if (!Number.isFinite(sourceRowIndex) || sourceRowIndex < 0) return;
+            const rawRow = target.rowIndex;
+            if (!Number.isFinite(rawRow) || rawRow < 0) return;
 
-            let displayRowIndex = sourceRowIndexes.indexOf(sourceRowIndex);
-            if (displayRowIndex < 0) {
+            const resolveDisplayRow = (sourceRowIndex: number): number => {
+                let displayRowIndex = sourceRowIndexes.indexOf(sourceRowIndex);
+                if (displayRowIndex >= 0) return displayRowIndex;
                 const sourceRow = data[sourceRowIndex];
-                if (sourceRow === undefined) return;
-                displayRowIndex = sortedData.indexOf(sourceRow);
-                if (displayRowIndex < 0) return;
+                if (sourceRow !== undefined) {
+                    displayRowIndex = sortedData.indexOf(sourceRow);
+                    if (displayRowIndex >= 0) return displayRowIndex;
+                }
+                return -1;
+            };
+
+            let displayRowIndex = resolveDisplayRow(rawRow);
+            /** 서버가 1-based 행 번호를 줄 때(표시 행과 같으면 0-based 로 재시도). */
+            if (displayRowIndex < 0 && rawRow >= 1 && rawRow <= data.length) {
+                displayRowIndex = resolveDisplayRow(rawRow - 1);
             }
+            if (displayRowIndex < 0) return;
 
             const columnName = String(target.columnName ?? "").trim();
             const header =
                 headerList.find((h) => h.name === target.columnName)
-                ?? headerList.find((h) => String(h.name ?? "").trim() === columnName);
+                ?? headerList.find((h) => String(h.name ?? "").trim() === columnName)
+                ?? headerList.find((h) => h.key === target.columnName)
+                ?? headerList.find((h) => String(h.key ?? "").trim() === columnName);
             const columnKey =
                 header?.key && visibleDataColumnKeys.has(header.key)
                     ? header.key
@@ -1016,12 +1039,10 @@ export default function  JsExcelGrid(props: GridType) {
                                     onColumnWidthChange={
                                         columnResizable ? handleColumnWidthChange : undefined
                                     }
-                                    onLayoutColumnWidths={onLayoutColumnWidths}
-                                    setFreezeUntilIndex={setFreezeUntilIndex}
+                                    onFreezeColumn={handleFreezeColumn}
                                     getStickyStyle={getStickyStyle}
                                     rowSelection={rowSelection}
                                     editable={props.editable === true}
-                                    cellSelection={props.cellSelection !== false}
                                     rowIdKey={props.rowIdKey}
                                     onCellChange={props.editable === true ? tableCellChange : undefined}
                                     onCellsPaste={props.editable === true ? tableCellsPaste : undefined}

@@ -13,14 +13,12 @@ import {
 } from "./gridStyles.ts";
 import type {
     CSSProperties,
-    Dispatch,
     MutableRefObject,
     ReactElement,
     ReactNode,
-    Ref,
-    SetStateAction,
 } from "react";
 import React, {
+    forwardRef,
     isValidElement,
     useCallback,
     useEffect,
@@ -206,33 +204,22 @@ type Props = {
     sortDir?: "ASC" | "DESC";
     headerCellRefs: MutableRefObject<Array<HTMLTableCellElement | null>>;
     colWidthByKey: Record<string, number>;
-    setFreezeUntilIndex: Dispatch<SetStateAction<number | null>>;
+    /** Alt+헤더 클릭 시 틀 고정(인덱스 토글). */
+    onFreezeColumn: (colIndex: number) => void;
     getStickyStyle: (args: { colIndex: number; isHeader: boolean }) => CSSProperties | undefined;
     onSortChange: (next: { key: string; direction: "ASC" | "DESC" }) => void;
     rowSelection?: RowSelectionProps;
     /** `true`(기본)이면 헤더 드래그로 열 너비 조절. */
     columnResizable?: boolean;
     onColumnWidthChange?: (columnKey: string, widthPx: number) => void;
-    /** `true` 일 때 재클릭 편집·붙여넣기 동작 활성. */
+    /** `true` 일 때 셀 선택·재클릭 편집·붙여넣기 동작 활성. */
     editable?: boolean;
-    /**
-     * `false` 가 아니면(기본) 본문 셀 클릭·드래그 선택·오류 바 포커스 하이라이트를 허용한다.
-     * `editable` 과 분리된다.
-     */
-    cellSelection?: boolean;
     /** 편집기에서 값이 변경되었을 때 발행. */
     onCellChange?: (event: GridCellEditEvent) => void | Promise<void>;
     /** 같은 열 범위 + 붙여넣기(Ctrl+V) 시 발행. */
     onCellsPaste?: (batches: GridCellPasteBatch[]) => void | Promise<void>;
     /** 붙여넣기 배치에서 행 식별 필드(기본 `id`). */
     rowIdKey?: string;
-    /** 헤더에서 잰 열 너비(px) — sticky `left` 계산 등 외부 레이아웃 동기화용. */
-    onLayoutColumnWidths?: (widths: readonly number[]) => void;
-    /**
-     * 외부에서 셀 포커스를 시키기 위한 ref.
-     * React 19 함수 컴포넌트 ref prop 패턴.
-     */
-    ref?: Ref<JsGridTableHandle>;
     /**
      * `data[i]` 의 원본 행 인덱스(정렬 전). `data[displayRowIndex]` 와 1:1.
      * 오류 인덱스는 원본 `data` 기준이므로 셀 스타일에 필요하다.
@@ -251,7 +238,7 @@ type Props = {
     ) => boolean;
 };
 
-export default function JsGridTable(props: Props) {
+const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(props, ref) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const headTableRef = useRef<HTMLTableElement>(null);
     /** 헤더에서 잰 기본 너비 — **열 key** 기준(순서 변경 시 인덱스 오염 방지). */
@@ -262,7 +249,6 @@ export default function JsGridTable(props: Props) {
     );
 
     const editingEnabled = props.editable === true;
-    const cellSelectionEnabled = props.cellSelection !== false;
     const rowIdKey = props.rowIdKey ?? "id";
 
     const [editorSession, setEditorSession] = useState<CellEditorSession | null>(null);
@@ -273,25 +259,18 @@ export default function JsGridTable(props: Props) {
     useEffect(() => {
         if (!editingEnabled) {
             setEditorSession(null);
+            setCellRange(null);
             dragStateRef.current = null;
             lastClickRef.current = null;
         }
     }, [editingEnabled]);
 
-    useEffect(() => {
-        if (!cellSelectionEnabled) {
-            setCellRange(null);
-            dragStateRef.current = null;
-            lastClickRef.current = null;
-        }
-    }, [cellSelectionEnabled]);
-
     const closeEditor = useCallback(() => setEditorSession(null), []);
 
     const isBodyCellSelectable = useCallback(
         (column: JsGridTableColumn) =>
-            cellSelectionEnabled && !column.__checkbox__ && !column.__rownum__,
-        [cellSelectionEnabled],
+            editingEnabled && !column.__checkbox__ && !column.__rownum__,
+        [editingEnabled],
     );
 
     const resolveCellValue = useCallback(
@@ -405,7 +384,7 @@ export default function JsGridTable(props: Props) {
     );
 
     useEffect(() => {
-        if (!cellSelectionEnabled) return;
+        if (!editingEnabled) return;
 
         const endDrag = (releaseRow: number, columnKey: string) => {
             const col = props.columns.find((c) => c.key === columnKey);
@@ -440,7 +419,7 @@ export default function JsGridTable(props: Props) {
             window.removeEventListener("pointerup", onPointerUp);
             window.removeEventListener("pointercancel", onPointerUp);
         };
-    }, [cellSelectionEnabled, finishDragClick, props.columns, resolveBodyCellFromPoint]);
+    }, [editingEnabled, finishDragClick, props.columns, resolveBodyCellFromPoint]);
 
     const buildPasteItems = useCallback(
         (range: GridCellRange, lines: string[]): GridCellPasteItem[] => {
@@ -615,11 +594,6 @@ export default function JsGridTable(props: Props) {
     const totalGridWidth = colWidthsReady ? sumWidths(effectiveColWidths) : 0;
 
     useLayoutEffect(() => {
-        if (!colWidthsReady || !props.onLayoutColumnWidths) return;
-        props.onLayoutColumnWidths(effectiveColWidths);
-    }, [colWidthsReady, effectiveColWidths, props.onLayoutColumnWidths]);
-
-    useLayoutEffect(() => {
         const table = headTableRef.current;
         if (!table) return;
         let raf = 0;
@@ -667,7 +641,7 @@ export default function JsGridTable(props: Props) {
     }, [props.headerCellRefs]);
 
     useImperativeHandle(
-        props.ref,
+        ref,
         (): JsGridTableHandle => ({
             focusCell: ({ rowIndex, columnKey }) => {
                 if (!Number.isFinite(rowIndex) || rowIndex < 0 || rowIndex >= props.data.length) return;
@@ -681,26 +655,23 @@ export default function JsGridTable(props: Props) {
                     ? props.columns.findIndex((c) => c.key === columnKey)
                     : -1;
 
-                /** 가상 행 마운트·가로 스크롤 후 선택 적용(한 프레임만으로는 스크롤이 무시되는 경우가 있음). */
+                const applyFocus = () => {
+                    scrollRowIntoView();
+                    if (colIndex >= 0) scrollColumnIntoView(colIndex);
+                    if (columnKey && editingEnabled) {
+                        setCellRange({ columnKey, rowStart: rowIndex, rowEnd: rowIndex });
+                    }
+                    scrollRef.current?.focus({ preventScroll: true });
+                };
+
+                /** 가상 행 마운트 후 스크롤·선택(프레임 1회만으로는 무시되는 경우 대비). */
                 requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        scrollRowIntoView();
-                        if (colIndex >= 0) scrollColumnIntoView(colIndex);
-                        if (columnKey && cellSelectionEnabled) {
-                            setCellRange({ columnKey, rowStart: rowIndex, rowEnd: rowIndex });
-                        }
-                        scrollRef.current?.focus({ preventScroll: true });
-                    });
+                    requestAnimationFrame(applyFocus);
                 });
+                window.setTimeout(applyFocus, 0);
             },
         }),
-        [
-            props.columns,
-            props.data.length,
-            rowVirtualizer,
-            scrollColumnIntoView,
-            cellSelectionEnabled,
-        ],
+        [props.columns, props.data.length, rowVirtualizer, scrollColumnIntoView, editingEnabled],
     );
 
     const lockedColumnStyle = (lockedPx: number | undefined): CSSProperties | undefined =>
@@ -776,7 +747,7 @@ export default function JsGridTable(props: Props) {
                                     onClick={(e) => {
                                         if ((e.target as HTMLElement).closest('[data-jsgrid-col-resize="1"]')) return;
                                         if (e.altKey) {
-                                            props.setFreezeUntilIndex((prev) => (prev === cdex ? null : cdex));
+                                            props.onFreezeColumn(cdex);
                                             return;
                                         }
                                         if (isCheckbox) {
@@ -1145,6 +1116,8 @@ export default function JsGridTable(props: Props) {
                                             tdStyle,
                                             mergeSheetErrorCellStyles(errorCats),
                                         );
+                                        tdStyle.maxHeight = ROW_HEIGHT_PX;
+                                        tdStyle.overflow = "hidden";
                                     }
                                 }
 
@@ -1342,4 +1315,6 @@ export default function JsGridTable(props: Props) {
             ) : null}
         </div>
     );
-}
+});
+
+export default JsGridTable;

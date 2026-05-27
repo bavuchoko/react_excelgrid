@@ -264,8 +264,8 @@ export function mergeSheetErrorCellStyles(
         style.backgroundColor = "#fecaca";
     }
     if (set.has("duplicatedb")) {
-        style.outline = "1px dashed #dc2626";
-        style.outlineOffset = -1;
+        /** `outline` 은 레이아웃 밖으로 그려져 가상 행(30px)과 어긋난다 — inset 으로 셀 안에만 표시 */
+        style.boxShadow = "inset 0 0 0 1px #dc2626";
     }
     if (set.has("codevalue")) {
         style.textDecoration = "line-through";
