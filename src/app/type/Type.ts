@@ -2,22 +2,41 @@ import type {CSSProperties, ReactNode} from "react";
 
 export type Content = Record<string, unknown>;
 
-export type Sheet = {
-    /** 시트를 식별하는 고유 값(서버 저장/복원 키) */
-    id: string;
-    /** 탭에 표시될 이름 (없으면 `Sheet 1` 같은 기본값 사용) */
-    name?: string;
-    header: Header[];
-    content: Content[];
+/**
+ * 그리드 데이터 타입.
+ *
+ * 서버에서 내려주는 응답 구조와 동일하게, 시트 이름(예: `"미들웨어"`, `"서버(물리)"`)을
+ * 키로 갖는 객체이다. 각 값(`SheetBody`)은 그 시트의 헤더/데이터/오류 정보를 담는다.
+ *
+ * 예시:
+ * ```ts
+ * const data: ExcelGridData = {
+ *   "미들웨어": { headers: [...], data: [...], errors: null },
+ *   "서버(물리)": { headers: [...], data: [...], errors: null },
+ * }
+ * ```
+ */
+export type ExcelGridData = Record<string, SheetBody>;
+
+/** 단일 시트의 본문(헤더·데이터·오류). 서버 응답의 시트 값과 동일한 모양이다. */
+export type SheetBody = {
+    headers: Header[];
+    data: Content[];
+    errors?: unknown;
 };
 
-export type ExcelGridData = {
-    sheets: Sheet[];
+/**
+ * 그리드 내부에서 다루는 정규화된 시트.
+ * `ExcelGridData` 의 객체 키(시트 이름)를 `name` 으로 풀어 배열로 만든 형태.
+ */
+export type Sheet = SheetBody & {
+    /** 시트 이름(객체 키와 동일). 시트 식별자·탭 표시에 사용된다. */
+    name: string;
 };
 
 export type SheetHeaderSavePayload = {
-    sheetId: string;
-    sheetName?: string;
+    /** 대상 시트 이름(= `ExcelGridData` 의 객체 키). */
+    sheetName: string;
     headers: HeaderState[];
 };
 
@@ -38,7 +57,7 @@ export type GridType ={
     onRowClick?: (row: unknown) => void
     /**
      * 전달 시 행 왼쪽에 체크박스·툴바 휴지통이 표시되고, 선택된 행의 "데이터 객체" 배열로 호출된다(1건이어도 배열).
-     * API 삭제 성공 후 `removeRowsFromExcelGridData({ data, sheetId, removedRows })`로 `data`를 갱신하면 된다.
+     * API 삭제 성공 후 `removeRowsFromExcelGridData({ data, sheetName, removedRows })`로 `data`를 갱신하면 된다.
      * 비동기 삭제 시 `Promise`를 반환하면 응답까지 삭제 로딩 UI가 유지된다.
      */
     onDeleteClick?: (rows: unknown[]) => void | Promise<void>
@@ -49,7 +68,8 @@ export type GridType ={
 
 export type HeaderState = {
     key: string;
-    label: string;
+    /** 사용자에게 보이는 컬럼명(= `Header.name`). */
+    name: string;
     visible: boolean;
     /** 저장된 컬럼 너비(px). 없으면 기본 레이아웃·측정에 따름. */
     width?: number;
@@ -64,7 +84,11 @@ export type GridCellRenderArgs = {
     stopRowClick: (e: unknown) => void;
 };
 
-/** `JsGridTable` 컬럼 배열(행번호·체크박스 열 포함). `Header`와 동일한 `GridCellRenderArgs`를 사용한다. */
+/**
+ * `JsGridTable` 컬럼 배열(행번호·체크박스 열 포함).
+ *
+ * 내부 표시용 모델이므로 `label` 을 사용한다(헤더의 `name` 과 별개).
+ */
 export type JsGridTableColumn = {
     key: string;
     label: string;
@@ -73,10 +97,29 @@ export type JsGridTableColumn = {
     __checkbox__?: boolean;
 };
 
-export type Header ={
-    key:string;
-    label:string;
-    type: DataType;
+/**
+ * 시트 헤더 정의. 서버 응답의 `headers[i]` 와 동일한 모양에 그리드 전용 필드(`width`·`render`)만 추가됐다.
+ */
+export type Header = {
+    key: string;
+    /** 사용자에게 표시할 컬럼명. */
+    name: string;
+    /**
+     * 셀 데이터 분류. 정렬/렌더 기준이 된다.
+     * 서버 응답이 `null` 인 경우(분류 없음)도 허용한다.
+     */
+    type: DataType | null;
+    /**
+     * 서버 측 타입 명칭(예: `Code`, `Department`, `UserAccount`, `CustomCode`, `AssetField` …).
+     * 그리드 동작에 직접 영향은 없지만, 저장/원복 시 값 보존을 위해 함께 보관한다.
+     */
+    typeName?: string | null;
+    /** 서버 응답의 `subClass`(예: `customCode`, `code`, `field`). 의미 보존용. */
+    subClass?: string | null;
+    /** 서버 응답의 `subValue`(예: `value`). 의미 보존용. */
+    subValue?: string | null;
+    /** 서버 응답의 `targetClass`(예: `AssetCustomCode`, `AssetCustomString`, `AssetField`). 의미 보존용. */
+    targetClass?: string | null;
     /** 사용자/서버 저장 너비(px). 있으면 해당 컬럼에 적용, 없으면 자동 너비. */
     width?: number;
     /**
@@ -87,7 +130,13 @@ export type Header ={
     render?: ReactNode | ((args: GridCellRenderArgs) => ReactNode);
 }
 
-export type DataType = 'string' | 'number' | 'state' | 'date' | 'score';
+/**
+ * 셀 분류 타입.
+ *
+ * - `string` / `number` / `state` / `date` / `score`: 기존 그리드 전용 타입.
+ * - `code` / `array`: 서버 응답에서 전달되는 타입. 현재는 문자열로 정렬·표시한다.
+ */
+export type DataType = 'string' | 'number' | 'state' | 'date' | 'score' | 'code' | 'array';
 
 export type IconType ={
     style?:CSSProperties

@@ -10,7 +10,7 @@ export function toHeaderState(
         const w = colWidthByKey?.[c.key];
         return {
             key: c.key,
-            label: c.label,
+            name: c.label,
             visible: c.visible,
             ...(w != null && w > 0 ? { width: Math.round(w) } : {}),
         };

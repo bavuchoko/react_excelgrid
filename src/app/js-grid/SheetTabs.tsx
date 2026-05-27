@@ -135,7 +135,7 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
             {sheets.map((s, i) => {
                 const active = i === activeIndex;
                 const label = (s.name && String(s.name).trim()) ? String(s.name) : `Sheet ${i + 1}`;
-                const count = Array.isArray(s.content) ? s.content.length : 0;
+                const count = Array.isArray(s.data) ? s.data.length : 0;
                 return (
                     <div
                         key={`${label}\u0000${i}`}

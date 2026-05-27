@@ -14,8 +14,19 @@ import SheetTabs from "./js-grid/SheetTabs.tsx";
 import { sortRowsByHeader } from "./js-grid/sortSheetContent.ts";
 
 export default function JsExcelGrid(props: GridType) {
-    const sheets = props.data?.sheets ?? [];
-    const [activeSheetId, setActiveSheetId] = useState<string | null>(null);
+    // 외부 입력은 `Record<sheetName, SheetBody>` 모양이므로, 내부 사용을 위해 배열(`Sheet[]`)로 정규화한다.
+    // 객체 키 삽입 순서가 곧 시트 순서이며, 시트 이름이 그대로 식별자(`name`)가 된다.
+    const sheets: Sheet[] = useMemo(() => {
+        const map = props.data ?? {};
+        return Object.entries(map).map(([name, body]) => ({
+            name,
+            headers: body?.headers ?? [],
+            data: body?.data ?? [],
+            errors: body?.errors,
+        }));
+    }, [props.data]);
+
+    const [activeSheetName, setActiveSheetName] = useState<string | null>(null);
     const [sheetColumnState, setSheetColumnState] = useState<Record<string, {
         userColumns: UserColumn[];
         colWidths: Record<string, number>;
@@ -24,29 +35,29 @@ export default function JsExcelGrid(props: GridType) {
     // sheets 변경 시 기본 active sheet를 첫번째로 보정
     useEffect(() => {
         if (sheets.length === 0) {
-            if (activeSheetId !== null) setActiveSheetId(null);
+            if (activeSheetName !== null) setActiveSheetName(null);
             return;
         }
-        const exists = activeSheetId != null && sheets.some((s) => s.id === activeSheetId);
-        if (!exists) setActiveSheetId(sheets[0]!.id);
-    }, [sheets, activeSheetId]);
+        const exists = activeSheetName != null && sheets.some((s) => s.name === activeSheetName);
+        if (!exists) setActiveSheetName(sheets[0]!.name);
+    }, [sheets, activeSheetName]);
 
     const safeActiveIndex = useMemo(() => {
         if (sheets.length === 0) return 0;
-        if (activeSheetId == null) return 0;
-        const idx = sheets.findIndex((s) => s.id === activeSheetId);
+        if (activeSheetName == null) return 0;
+        const idx = sheets.findIndex((s) => s.name === activeSheetName);
         return idx >= 0 ? idx : 0;
-    }, [sheets, activeSheetId]);
+    }, [sheets, activeSheetName]);
 
     const activeSheet: Sheet | null = sheets.length > 0 ? (sheets[safeActiveIndex] ?? sheets[0] ?? null) : null;
-    const data = activeSheet?.content ?? [];
-    const headerList: Header[] = activeSheet?.header ?? [];
-    const activeId = activeSheet?.id ?? null;
+    const data = activeSheet?.data ?? [];
+    const headerList: Header[] = activeSheet?.headers ?? [];
+    const activeName = activeSheet?.name ?? null;
 
     const headerTypeByKey = useMemo(() => {
         const m = new Map<string, DataType>();
         for (const h of headerList) {
-            m.set(h.key, h.type);
+            if (h.type != null) m.set(h.key, h.type);
         }
         return m;
     }, [headerList]);
@@ -71,8 +82,8 @@ export default function JsExcelGrid(props: GridType) {
     );
     // 시트/헤더가 바뀌면, 해당 시트의 저장된 컬럼 설정이 있으면 복원하고 없으면 기본값(모두 visible)로 만든다.
     useEffect(() => {
-        if (!activeId) return;
-        const saved = sheetColumnState[activeId];
+        if (!activeName) return;
+        const saved = sheetColumnState[activeName];
         if (saved?.userColumns?.length) {
             // 현재 headerList에 존재하는 key만 유지 + 신규 key는 visible true로 추가
             const savedByKey = new Map(saved.userColumns.map((c) => [c.key, c] as const));
@@ -81,7 +92,7 @@ export default function JsExcelGrid(props: GridType) {
                 const s = savedByKey.get(k);
                 return {
                     key: k,
-                    label: String(h.label ?? k),
+                    label: String(h.name ?? k),
                     visible: s?.visible ?? true,
                 };
             });
@@ -90,13 +101,13 @@ export default function JsExcelGrid(props: GridType) {
             setUserColumns(
                 headerList.map((h) => ({
                     key: h.key,
-                    label: String(h.label ?? h.key),
+                    label: String(h.name ?? h.key),
                     visible: true,
                 })),
             );
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeId, keysSig]);
+    }, [activeName, keysSig]);
 
     useEffect(() => {
         if (!enablePseudoFullscreen) return;
@@ -123,7 +134,7 @@ export default function JsExcelGrid(props: GridType) {
         [headerList],
     );
     const persistedColWidths = useMemo(() => {
-        const saved = activeId ? sheetColumnState[activeId] : undefined;
+        const saved = activeName ? sheetColumnState[activeName] : undefined;
         if (saved?.colWidths && Object.keys(saved.colWidths).length > 0) {
             return saved.colWidths;
         }
@@ -132,7 +143,7 @@ export default function JsExcelGrid(props: GridType) {
             if (typeof h.width === "number" && h.width > 0) m[h.key] = Math.round(h.width);
         }
         return m;
-    }, [headerWidthSig, activeId, sheetColumnState]);
+    }, [headerWidthSig, activeName, sheetColumnState]);
 
     const columns = useMemo((): readonly JsGridTableColumn[] => {
         const list = headerList;
@@ -422,16 +433,16 @@ export default function JsExcelGrid(props: GridType) {
                         setIsUploadPanelOpen(false);
 
                         // 시트 전환 전에 현재 시트의 "진행중 설정"을 저장
-                        if (activeId) {
+                        if (activeName) {
                             setSheetColumnState((prev) => ({
                                 ...prev,
-                                [activeId]: {
+                                [activeName]: {
                                     userColumns,
                                     colWidths: colWidthByKey,
                                 },
                             }));
                         }
-                        setActiveSheetId(nextSheet.id);
+                        setActiveSheetName(nextSheet.name);
                     }}
                 />
 
@@ -456,17 +467,17 @@ export default function JsExcelGrid(props: GridType) {
                     }}
                     onReset={() => {
                         // 현재 시트 설정만 초기화
-                        if (activeId) {
+                        if (activeName) {
                             setSheetColumnState((prev) => {
                                 const next = { ...prev };
-                                delete next[activeId];
+                                delete next[activeName];
                                 return next;
                             });
                         }
                         setUserColumns(
                             headerList.map((c) => ({
                                 key: c.key,
-                                label: String(c.label ?? c.key),
+                                label: String(c.name ?? c.key),
                                 visible: true,
                             })),
                         );
@@ -474,10 +485,10 @@ export default function JsExcelGrid(props: GridType) {
                     }}
                     onSave={() => {
                         const payload: HeaderState[] = toHeaderState(userColumns, colWidthByKey);
-                        if (activeId) {
+                        if (activeName) {
                             setSheetColumnState((prev) => ({
                                 ...prev,
-                                [activeId]: {
+                                [activeName]: {
                                     userColumns,
                                     colWidths: colWidthByKey,
                                 },
@@ -485,8 +496,7 @@ export default function JsExcelGrid(props: GridType) {
                             // 패키지는 API를 호출하지 않는다. 사용처가 저장 후 data를 갱신해 내려주면 된다.
                             Promise
                                 .resolve(props.onHeaderSave?.({
-                                    sheetId: activeId,
-                                    sheetName: activeSheet?.name,
+                                    sheetName: activeName,
                                     headers: payload,
                                 }))
                                 .catch(() => {

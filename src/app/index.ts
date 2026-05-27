@@ -1,10 +1,12 @@
 export type {
     Content,
+    DataType,
     ExcelGridData,
     GridType,
     Header,
     HeaderState,
     Sheet,
+    SheetBody,
     SheetHeaderSavePayload,
 } from "./type/Type.ts";
 
