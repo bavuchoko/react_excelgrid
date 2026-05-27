@@ -41,7 +41,7 @@ import { isCellModifiedFromBaseline } from "./js-grid/cellModified.ts";
 import { buildSheetCellErrorLookup } from "./js-grid/sheetErrors.ts";
 import { filterChangedPasteBatches, resolveChangeRowId } from "./js-grid/gridCellSelection.ts";
 import { areCellValuesEqual } from "./js-grid/cellModified.ts";
-import { sortRowsByHeader } from "./js-grid/sortSheetContent.ts";
+import { sortRowsByHeaderWithSourceIndexes } from "./js-grid/sortSheetContent.ts";
 import { applySheetCellEdit, applySheetCellsPaste } from "./utils/applySheetCellEdits.ts";
 import { applyHeaderLayoutToHeaders } from "./utils/applyHeaderState.ts";
 
@@ -211,15 +211,9 @@ export default function  JsExcelGrid(props: GridType) {
     const [sortKey, setSortKey] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('ASC');
 
-    const sortedData = useMemo(
-        () => sortRowsByHeader(data, sortKey, sortDir, headerTypeByKey),
+    const { rows: sortedData, sourceIndexes: sourceRowIndexes } = useMemo(
+        () => sortRowsByHeaderWithSourceIndexes(data, sortKey, sortDir, headerTypeByKey),
         [data, sortKey, sortDir, headerTypeByKey],
-    );
-
-    /** 오류 행 인덱스는 정렬 전 `data` 기준 — 표시 행마다 원본 인덱스를 매핑한다. */
-    const sourceRowIndexes = useMemo(
-        () => sortedData.map((row) => data.indexOf(row as Content)),
-        [sortedData, data],
     );
 
     const cellErrorLookup = useMemo(
@@ -397,6 +391,14 @@ export default function  JsExcelGrid(props: GridType) {
         const cb: JsGridTableColumn = { key: "__checkbox__", label: "", __checkbox__: true };
         return showRowSelection ? [cb, rowNum, ...visible] : [rowNum, ...visible];
     }, [userColumns, showRowSelection, headerList]);
+
+    const visibleDataColumnKeys = useMemo(() => {
+        const keys = new Set<string>();
+        for (const col of columns) {
+            if (!col.__checkbox__ && !col.__rownum__) keys.add(col.key);
+        }
+        return keys;
+    }, [columns]);
 
     const [isFieldsMenuOpen, setIsFieldsMenuOpen] = useState(false);
     const [fieldsSaveBusy, setFieldsSaveBusy] = useState(false);
@@ -727,23 +729,37 @@ export default function  JsExcelGrid(props: GridType) {
      *
      * - 컬럼: `headerList` 에서 `name` 으로 찾은 뒤 `key` 를 그리드에 전달.
      *   숨김 처리되어 보이는 컬럼이 아닐 수도 있는데, 그때는 행만 스크롤한다.
-     * - 행: 서버 응답이 가리키는 인덱스는 원본 `data` 기준. 사용자가 정렬을 걸어
-     *   `sortedData` 순서가 바뀌었으면 원본 행을 가리키도록 인덱스를 재계산한다.
+     * - 행: 서버 `errors` 의 `rowIndex` 는 정렬 전 `data` 기준(0-based).
+     *   `sourceRowIndexes` 로 표시 행 번호를 찾는다.
      */
     const handleSheetErrorFocus = useCallback(
         (target: SheetErrorFocusTarget) => {
-            if (!Number.isFinite(target.rowIndex) || target.rowIndex < 0) return;
-            const sourceRow = data[target.rowIndex];
-            if (sourceRow === undefined) return;
-            const displayRowIndex = sortedData.indexOf(sourceRow);
-            if (displayRowIndex < 0) return;
-            const header = headerList.find((h) => h.name === target.columnName);
+            const sourceRowIndex = target.rowIndex;
+            if (!Number.isFinite(sourceRowIndex) || sourceRowIndex < 0) return;
+
+            let displayRowIndex = sourceRowIndexes.indexOf(sourceRowIndex);
+            if (displayRowIndex < 0) {
+                const sourceRow = data[sourceRowIndex];
+                if (sourceRow === undefined) return;
+                displayRowIndex = sortedData.indexOf(sourceRow);
+                if (displayRowIndex < 0) return;
+            }
+
+            const columnName = String(target.columnName ?? "").trim();
+            const header =
+                headerList.find((h) => h.name === target.columnName)
+                ?? headerList.find((h) => String(h.name ?? "").trim() === columnName);
+            const columnKey =
+                header?.key && visibleDataColumnKeys.has(header.key)
+                    ? header.key
+                    : undefined;
+
             tableRef.current?.focusCell({
                 rowIndex: displayRowIndex,
-                columnKey: header?.key,
+                columnKey,
             });
         },
-        [data, sortedData, headerList],
+        [data, sortedData, headerList, sourceRowIndexes, visibleDataColumnKeys],
     );
 
     const toolbarStartNode = useMemo(
@@ -1005,6 +1021,7 @@ export default function  JsExcelGrid(props: GridType) {
                                     getStickyStyle={getStickyStyle}
                                     rowSelection={rowSelection}
                                     editable={props.editable === true}
+                                    cellSelection={props.cellSelection !== false}
                                     rowIdKey={props.rowIdKey}
                                     onCellChange={props.editable === true ? tableCellChange : undefined}
                                     onCellsPaste={props.editable === true ? tableCellsPaste : undefined}

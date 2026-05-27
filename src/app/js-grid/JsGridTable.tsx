@@ -213,8 +213,13 @@ type Props = {
     /** `true`(기본)이면 헤더 드래그로 열 너비 조절. */
     columnResizable?: boolean;
     onColumnWidthChange?: (columnKey: string, widthPx: number) => void;
-    /** `true` 일 때 셀 선택·재클릭 편집·세로 드래그·붙여넣기 동작 활성. */
+    /** `true` 일 때 재클릭 편집·붙여넣기 동작 활성. */
     editable?: boolean;
+    /**
+     * `false` 가 아니면(기본) 본문 셀 클릭·드래그 선택·오류 바 포커스 하이라이트를 허용한다.
+     * `editable` 과 분리된다.
+     */
+    cellSelection?: boolean;
     /** 편집기에서 값이 변경되었을 때 발행. */
     onCellChange?: (event: GridCellEditEvent) => void | Promise<void>;
     /** 같은 열 범위 + 붙여넣기(Ctrl+V) 시 발행. */
@@ -257,6 +262,7 @@ export default function JsGridTable(props: Props) {
     );
 
     const editingEnabled = props.editable === true;
+    const cellSelectionEnabled = props.cellSelection !== false;
     const rowIdKey = props.rowIdKey ?? "id";
 
     const [editorSession, setEditorSession] = useState<CellEditorSession | null>(null);
@@ -267,18 +273,25 @@ export default function JsGridTable(props: Props) {
     useEffect(() => {
         if (!editingEnabled) {
             setEditorSession(null);
-            setCellRange(null);
             dragStateRef.current = null;
             lastClickRef.current = null;
         }
     }, [editingEnabled]);
 
+    useEffect(() => {
+        if (!cellSelectionEnabled) {
+            setCellRange(null);
+            dragStateRef.current = null;
+            lastClickRef.current = null;
+        }
+    }, [cellSelectionEnabled]);
+
     const closeEditor = useCallback(() => setEditorSession(null), []);
 
     const isBodyCellSelectable = useCallback(
         (column: JsGridTableColumn) =>
-            editingEnabled && !column.__checkbox__ && !column.__rownum__,
-        [editingEnabled],
+            cellSelectionEnabled && !column.__checkbox__ && !column.__rownum__,
+        [cellSelectionEnabled],
     );
 
     const resolveCellValue = useCallback(
@@ -360,7 +373,8 @@ export default function JsGridTable(props: Props) {
             if (!drag.moved) {
                 const prev = lastClickRef.current;
                 if (
-                    prev
+                    editingEnabled
+                    && prev
                     && prev.rowIndex === rowIndex
                     && prev.columnKey === columnKey
                     && hasEditor
@@ -374,7 +388,7 @@ export default function JsGridTable(props: Props) {
                 lastClickRef.current = null;
             }
         },
-        [openCellEditor],
+        [editingEnabled, openCellEditor],
     );
 
     const resolveBodyCellFromPoint = useCallback(
@@ -391,7 +405,7 @@ export default function JsGridTable(props: Props) {
     );
 
     useEffect(() => {
-        if (!editingEnabled) return;
+        if (!cellSelectionEnabled) return;
 
         const endDrag = (releaseRow: number, columnKey: string) => {
             const col = props.columns.find((c) => c.key === columnKey);
@@ -426,7 +440,7 @@ export default function JsGridTable(props: Props) {
             window.removeEventListener("pointerup", onPointerUp);
             window.removeEventListener("pointercancel", onPointerUp);
         };
-    }, [editingEnabled, finishDragClick, props.columns, resolveBodyCellFromPoint]);
+    }, [cellSelectionEnabled, finishDragClick, props.columns, resolveBodyCellFromPoint]);
 
     const buildPasteItems = useCallback(
         (range: GridCellRange, lines: string[]): GridCellPasteItem[] => {
@@ -657,20 +671,36 @@ export default function JsGridTable(props: Props) {
         (): JsGridTableHandle => ({
             focusCell: ({ rowIndex, columnKey }) => {
                 if (!Number.isFinite(rowIndex) || rowIndex < 0 || rowIndex >= props.data.length) return;
-                rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });
-                if (!columnKey) return;
-                const colIndex = props.columns.findIndex((c) => c.key === columnKey);
-                if (colIndex < 0) return;
-                /** 행이 가상 렌더로 마운트된 뒤에 가로 스크롤·선택을 적용. */
+
+                const scrollRowIntoView = () => {
+                    rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });
+                };
+                scrollRowIntoView();
+
+                const colIndex = columnKey
+                    ? props.columns.findIndex((c) => c.key === columnKey)
+                    : -1;
+
+                /** 가상 행 마운트·가로 스크롤 후 선택 적용(한 프레임만으로는 스크롤이 무시되는 경우가 있음). */
                 requestAnimationFrame(() => {
-                    scrollColumnIntoView(colIndex);
-                    setCellRange({ columnKey, rowStart: rowIndex, rowEnd: rowIndex });
-                    /** 클립보드 핸들러가 동작하도록 그리드에 포커스 부여. */
-                    scrollRef.current?.focus({ preventScroll: true });
+                    requestAnimationFrame(() => {
+                        scrollRowIntoView();
+                        if (colIndex >= 0) scrollColumnIntoView(colIndex);
+                        if (columnKey && cellSelectionEnabled) {
+                            setCellRange({ columnKey, rowStart: rowIndex, rowEnd: rowIndex });
+                        }
+                        scrollRef.current?.focus({ preventScroll: true });
+                    });
                 });
             },
         }),
-        [props.columns, props.data.length, rowVirtualizer, scrollColumnIntoView],
+        [
+            props.columns,
+            props.data.length,
+            rowVirtualizer,
+            scrollColumnIntoView,
+            cellSelectionEnabled,
+        ],
     );
 
     const lockedColumnStyle = (lockedPx: number | undefined): CSSProperties | undefined =>
@@ -960,12 +990,14 @@ export default function JsGridTable(props: Props) {
                     const rdex = vr.index;
                     const row = props.data[rdex];
                     const rowId = resolveRowId(row, rowIdKey);
+                    const rowIdForClass =
+                        rowId === null || rowId === undefined ? undefined : rowId;
                     return (
                         <div
                             key={vr.key}
                             role="row"
                             aria-rowindex={rdex + 2}
-                            className={bodyRowClassName(rdex, rowId)}
+                            className={bodyRowClassName(rdex, rowIdForClass)}
                             style={{
                                 position: "absolute",
                                 top: vr.start,
@@ -998,7 +1030,8 @@ export default function JsGridTable(props: Props) {
                                       : getValue(row, column.key);
 
                                 const selectable = isBodyCellSelectable(column);
-                                const hasEditor = selectable && Boolean(column.editor);
+                                const hasEditor =
+                                    editingEnabled && selectable && Boolean(column.editor);
                                 const isSelected = isCellInRange(cellRange, rdex, column.key);
                                 const isEditing =
                                     editorSession?.rowIndex === rdex

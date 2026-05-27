@@ -63,3 +63,32 @@ export function sortRowsByHeader(
     });
     return indexed.map((x) => x.row);
 }
+
+/** `sortRowsByHeader` 결과와 표시 행 → 원본 인덱스 매핑(정렬 후에도 오류 `rowIndex` 추적용). */
+export function sortRowsByHeaderWithSourceIndexes(
+    rows: readonly unknown[],
+    sortKey: string | null,
+    sortDir: "ASC" | "DESC",
+    headerTypeByKey: ReadonlyMap<string, DataType>,
+): { rows: unknown[]; sourceIndexes: number[] } {
+    if (sortKey == null || rows.length <= 1) {
+        return {
+            rows: rows as unknown[],
+            sourceIndexes: rows.map((_, i) => i),
+        };
+    }
+    const type = headerTypeByKey.get(sortKey);
+    const indexed = rows.map((row, i) => ({ row, i }));
+    indexed.sort((A, B) => {
+        const va = getValue(A.row as object, sortKey);
+        const vb = getValue(B.row as object, sortKey);
+        let c = compareCellValues(va, vb, type);
+        if (sortDir === "DESC") c = -c;
+        if (c !== 0) return c;
+        return A.i - B.i;
+    });
+    return {
+        rows: indexed.map((x) => x.row),
+        sourceIndexes: indexed.map((x) => x.i),
+    };
+}
