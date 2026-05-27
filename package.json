@@ -1,19 +1,48 @@
 {
-  "name": "react-excelgrid",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@bavuchoko/react-excelgrid",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Excel-like data grid for React — multi-sheet, editable, resizable columns, field reorder/hide.",
+  "keywords": ["react", "grid", "excel", "datagrid", "table", "editable"],
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./dist/react-excelgrid.css": "./dist/react-excelgrid.css"
+  },
+  "files": [
+    "dist/index.mjs",
+    "dist/index.mjs.map",
+    "dist/index.cjs",
+    "dist/index.cjs.map",
+    "dist/react-excelgrid.css",
+    "dist/types"
+  ],
+  "sideEffects": false,
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:types": "tsc -p tsconfig.lib.json",
+    "build:bundle": "vite build --mode lib",
+    "postbuild:bundle": "node -e \"const fs=require('fs');['dist/favicon.svg','dist/icons.svg','dist/index.html'].forEach(f=>{try{fs.unlinkSync(f)}catch(_){}})\"",
+    "prebuild:lib": "node -e \"const fs=require('fs'),path=require('path');function rm(d){if(!fs.existsSync(d))return;fs.readdirSync(d).forEach(f=>{const p=path.join(d,f);fs.statSync(p).isDirectory()?rm(p):fs.unlinkSync(p)});fs.rmdirSync(d)}rm('dist')\"",
+    "build:lib": "npm run build:types && npm run build:bundle",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepublishOnly": "npm run build:types && npm run build:bundle"
   },
-  "dependencies": {
-    "@bavuchoko/js-tooltip": "^0.1.0",
-    "@tanstack/react-virtual": "^3.13.24",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+  "peerDependencies": {
+    "@bavuchoko/js-tooltip": ">=0.1.0",
+    "@tanstack/react-virtual": ">=3.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -28,5 +57,13 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10"
+  },
+  "dependencies": {
+    "@bavuchoko/js-tooltip": "^0.1.0",
+    "@tanstack/react-virtual": "^3.13.24"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
   }
 }

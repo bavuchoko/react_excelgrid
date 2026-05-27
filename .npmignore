@@ -1,0 +1,26 @@
+# 소스 / 데모
+src/
+public/
+index.html
+
+# 설정
+vite.config.ts
+tsconfig*.json
+eslint.config.*
+.eslintrc*
+
+# 개발 관련
+node_modules/
+*.log
+.env*
+
+# Git
+.git/
+.gitignore
+
+# 기타
+*.tsbuildinfo
+dist/favicon.svg
+dist/icons.svg
+dist/*.html
+dist/assets/
