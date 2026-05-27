@@ -768,6 +768,7 @@ export default function  JsExcelGrid(props: GridType) {
             <JsGridRowSelectionProvider value={rowSelectionApi}>
                 <div
                     ref={rootRef}
+                    className="js-grid-container"
                     style={{
                         border: `1px solid ${GRID_BORDER}`,
                         width: '100%',

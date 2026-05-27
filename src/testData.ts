@@ -392,7 +392,7 @@ export const SAMPLE_DATA: ExcelGridData = {
         "data": [
             {
                 "id": "177",
-                "assetName": "윈도우 정품 라이선스 21",
+                "assetName": null,
                 "assetCode": null,
                 "task": null,
                 "location": "ap-northeast-2a (AZ)",
@@ -413,11 +413,30 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             },
             {
                 "id": "172",
-                "assetName": "윈도우 정품 라이선스 16",
+                "assetName": null,
                 "assetCode": null,
                 "task": null,
                 "location": "판교 오피스",
@@ -438,7 +457,26 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             },
             {
                 "id": "167",
@@ -463,7 +501,26 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             },
             {
                 "id": "162",
@@ -488,7 +545,26 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             },
             {
                 "id": "157",
@@ -513,7 +589,26 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             },
             {
                 "id": "152",
@@ -538,10 +633,145 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null
             }
         ],
-        "errors": null
+        "errors": {
+            "necessary": [
+                {
+                    "자산명": [
+                        0,
+                        1
+                    ]
+                }
+            ],
+            "duplicatedb": [
+                {
+                    "자산명": [
+                        0,
+                        1
+                    ]
+                }
+            ],
+            "codevalue": [
+                {
+                    "업무그룹": []
+                },
+                {
+                    "자산위치": []
+                },
+                {
+                    "SLA 그룹": []
+                },
+                {
+                    "부서": []
+                },
+                {
+                    "프로젝트코드": []
+                },
+                {
+                    "1차 유지보수업체": []
+                },
+                {
+                    "2차 유지보수업체": []
+                },
+                {
+                    "3차 유지보수업체": []
+                },
+                {
+                    "등록자": []
+                },
+                {
+                    "수정자": []
+                },
+                {
+                    "운영 담당자": []
+                },
+                {
+                    "자산 사용자": []
+                },
+                {
+                    "IP(하드웨어)(C_146)": []
+                },
+                {
+                    "IP(NAS)(C_101)": []
+                },
+                {
+                    "자산유형(C_1)": []
+                },
+                {
+                    "자산유형비고(C_5)": []
+                },
+                {
+                    "공통코드(테스트용)(C_34)": []
+                },
+                {
+                    "기타작업(C_10)": []
+                },
+                {
+                    "기타(C_9)": []
+                },
+                {
+                    "IP(HB)(C_102)": []
+                },
+                {
+                    "IP(백업)(C_91)": []
+                },
+                {
+                    "IP(서비스)(C_90)": []
+                }
+            ],
+            "duplicate": [
+                {
+                    "자산명": []
+                }
+            ],
+            "typeError": [
+                {
+                    "등록일": []
+                },
+                {
+                    "수정일": []
+                },
+                {
+                    "서비스 종료일": []
+                },
+                {
+                    "도입일자": []
+                },
+                {
+                    "설치일자(S_15)": []
+                },
+                {
+                    "폐기일자(S_17)": []
+                },
+                {
+                    "서비스개시일자(S_16)": []
+                },
+                {
+                    "도입일자(S_7)": []
+                }
+            ]
+        }
     },
     "서버(물리)": {
         "headers": [
@@ -1075,7 +1305,29 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomCodesψ28": "",
                 "assetCustomCodesψ29": "",
                 "assetCustomCodesψ30": "",
-                "assetCustomCodesψ31": ""
+                "assetCustomCodesψ31": "",
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null,
+                "assetFieldsψ43": null,
+                "assetFieldsψ44": null,
+                "assetFieldsψ45": null,
+                "assetFieldsψ46": null,
+                "assetFieldsψ47": null,
+                "assetFieldsψ48": null,
+                "assetFieldsψ49": null,
+                "assetFieldsψ50": null,
+                "assetFieldsψ51": null,
+                "assetFieldsψ52": null,
+                "assetFieldsψ53": null
             },
             {
                 "id": "11",
@@ -1110,7 +1362,29 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomCodesψ28": "",
                 "assetCustomCodesψ29": "",
                 "assetCustomCodesψ30": "",
-                "assetCustomCodesψ31": ""
+                "assetCustomCodesψ31": "",
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null,
+                "assetFieldsψ43": null,
+                "assetFieldsψ44": null,
+                "assetFieldsψ45": null,
+                "assetFieldsψ46": null,
+                "assetFieldsψ47": null,
+                "assetFieldsψ48": null,
+                "assetFieldsψ49": null,
+                "assetFieldsψ50": null,
+                "assetFieldsψ51": null,
+                "assetFieldsψ52": null,
+                "assetFieldsψ53": null
             },
             {
                 "id": "2",
@@ -1145,10 +1419,163 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomCodesψ28": "",
                 "assetCustomCodesψ29": "",
                 "assetCustomCodesψ30": "",
-                "assetCustomCodesψ31": ""
+                "assetCustomCodesψ31": "",
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null,
+                "assetFieldsψ43": null,
+                "assetFieldsψ44": null,
+                "assetFieldsψ45": null,
+                "assetFieldsψ46": null,
+                "assetFieldsψ47": null,
+                "assetFieldsψ48": null,
+                "assetFieldsψ49": null,
+                "assetFieldsψ50": null,
+                "assetFieldsψ51": null,
+                "assetFieldsψ52": null,
+                "assetFieldsψ53": null
             }
         ],
-        "errors": null
+        "errors": {
+            "necessary": [
+                {
+                    "자산명": []
+                }
+            ],
+            "duplicatedb": [
+                {
+                    "자산명": []
+                }
+            ],
+            "codevalue": [
+                {
+                    "업무그룹": []
+                },
+                {
+                    "자산위치": []
+                },
+                {
+                    "SLA 그룹": []
+                },
+                {
+                    "부서": []
+                },
+                {
+                    "프로젝트코드": []
+                },
+                {
+                    "1차 유지보수업체": []
+                },
+                {
+                    "2차 유지보수업체": []
+                },
+                {
+                    "3차 유지보수업체": []
+                },
+                {
+                    "등록자": []
+                },
+                {
+                    "수정자": []
+                },
+                {
+                    "운영 담당자": []
+                },
+                {
+                    "자산 사용자": []
+                },
+                {
+                    "IP(하드웨어)(C_146)": []
+                },
+                {
+                    "IP(NAS)(C_101)": []
+                },
+                {
+                    "자산유형(C_1)": []
+                },
+                {
+                    "자산유형비고(C_5)": []
+                },
+                {
+                    "공통코드(테스트용)(C_34)": []
+                },
+                {
+                    "기타작업(C_10)": []
+                },
+                {
+                    "기타(C_9)": []
+                },
+                {
+                    "IP(HB)(C_102)": []
+                },
+                {
+                    "IP(백업)(C_91)": []
+                },
+                {
+                    "IP(서비스)(C_90)": []
+                },
+                {
+                    "납품 처리자(F_14)": []
+                },
+                {
+                    "납품 검수자(F_13)": []
+                },
+                {
+                    "납품 담당자(F_5)": []
+                },
+                {
+                    "상태 코드(F_1)": []
+                },
+                {
+                    "가상화 여부(F_7)": []
+                },
+                {
+                    "test(F_91)": []
+                }
+            ],
+            "duplicate": [
+                {
+                    "자산명": []
+                }
+            ],
+            "typeError": [
+                {
+                    "등록일": []
+                },
+                {
+                    "수정일": []
+                },
+                {
+                    "서비스 종료일": []
+                },
+                {
+                    "도입일자": []
+                },
+                {
+                    "설치일자(S_15)": []
+                },
+                {
+                    "폐기일자(S_17)": []
+                },
+                {
+                    "서비스개시일자(S_16)": []
+                },
+                {
+                    "도입일자(S_7)": []
+                },
+                {
+                    "납품일자(F_4)": []
+                }
+            ]
+        }
     },
     "네트워크 장비": {
         "headers": [
@@ -1584,6 +2011,15 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomCodesψ29": "",
                 "assetCustomCodesψ30": "",
                 "assetCustomCodesψ31": "",
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
                 "assetFieldsψ41": "",
                 "assetFieldsψ42": "유휴"
             },
@@ -1629,7 +2065,9 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomStringsψ37": "",
                 "assetCustomStringsψ38": "",
                 "assetCustomStringsψ39": "",
-                "assetCustomStringsψ40": ""
+                "assetCustomStringsψ40": "",
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "211",
@@ -1673,7 +2111,9 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "assetCustomStringsψ37": "",
                 "assetCustomStringsψ38": "",
                 "assetCustomStringsψ39": "",
-                "assetCustomStringsψ40": ""
+                "assetCustomStringsψ40": "",
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "145",
@@ -1698,7 +2138,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "140",
@@ -1723,7 +2184,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "135",
@@ -1748,7 +2230,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "130",
@@ -1773,7 +2276,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "125",
@@ -1798,7 +2322,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "120",
@@ -1823,7 +2368,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "115",
@@ -1848,7 +2414,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "110",
@@ -1873,7 +2460,28 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             },
             {
                 "id": "105",
@@ -1898,9 +2506,146 @@ export const SAMPLE_DATA: ExcelGridData = {
                 "mngRate": null,
                 "etc": null,
                 "operator": "",
-                "handler": ""
+                "handler": "",
+                "assetCustomCodesψ22": null,
+                "assetCustomCodesψ23": null,
+                "assetCustomCodesψ24": null,
+                "assetCustomCodesψ25": null,
+                "assetCustomCodesψ26": null,
+                "assetCustomCodesψ27": null,
+                "assetCustomCodesψ28": null,
+                "assetCustomCodesψ29": null,
+                "assetCustomCodesψ30": null,
+                "assetCustomCodesψ31": null,
+                "assetCustomStringsψ32": null,
+                "assetCustomStringsψ33": null,
+                "assetCustomStringsψ34": null,
+                "assetCustomStringsψ35": null,
+                "assetCustomStringsψ36": null,
+                "assetCustomStringsψ37": null,
+                "assetCustomStringsψ38": null,
+                "assetCustomStringsψ39": null,
+                "assetCustomStringsψ40": null,
+                "assetFieldsψ41": null,
+                "assetFieldsψ42": null
             }
         ],
-        "errors": null
+        "errors": {
+            "necessary": [
+                {
+                    "자산명": []
+                }
+            ],
+            "duplicatedb": [
+                {
+                    "자산명": []
+                }
+            ],
+            "codevalue": [
+                {
+                    "업무그룹": []
+                },
+                {
+                    "자산위치": []
+                },
+                {
+                    "SLA 그룹": []
+                },
+                {
+                    "부서": []
+                },
+                {
+                    "프로젝트코드": []
+                },
+                {
+                    "1차 유지보수업체": []
+                },
+                {
+                    "2차 유지보수업체": []
+                },
+                {
+                    "3차 유지보수업체": []
+                },
+                {
+                    "등록자": []
+                },
+                {
+                    "수정자": []
+                },
+                {
+                    "운영 담당자": []
+                },
+                {
+                    "자산 사용자": []
+                },
+                {
+                    "IP(하드웨어)(C_146)": []
+                },
+                {
+                    "IP(NAS)(C_101)": []
+                },
+                {
+                    "자산유형(C_1)": []
+                },
+                {
+                    "자산유형비고(C_5)": []
+                },
+                {
+                    "공통코드(테스트용)(C_34)": []
+                },
+                {
+                    "기타작업(C_10)": []
+                },
+                {
+                    "기타(C_9)": []
+                },
+                {
+                    "IP(HB)(C_102)": []
+                },
+                {
+                    "IP(백업)(C_91)": []
+                },
+                {
+                    "IP(서비스)(C_90)": []
+                },
+                {
+                    "네트워크 장비 필드 (F_41)": []
+                },
+                {
+                    "서버그룹(F_11)": []
+                }
+            ],
+            "duplicate": [
+                {
+                    "자산명": []
+                }
+            ],
+            "typeError": [
+                {
+                    "등록일": []
+                },
+                {
+                    "수정일": []
+                },
+                {
+                    "서비스 종료일": []
+                },
+                {
+                    "도입일자": []
+                },
+                {
+                    "설치일자(S_15)": []
+                },
+                {
+                    "폐기일자(S_17)": []
+                },
+                {
+                    "서비스개시일자(S_16)": []
+                },
+                {
+                    "도입일자(S_7)": []
+                }
+            ]
+        }
     }
 }

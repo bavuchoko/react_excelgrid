@@ -56,6 +56,11 @@ import {
 } from "./sheetErrors.ts";
 import ASC from "../resources/icon/ASC.tsx";
 import DESC from "../resources/icon/DESC.tsx";
+import {
+    bodyCellStateClassNames,
+    bodyRowClassName,
+    gridColClassNames,
+} from "./gridClassNames.ts";
 
 export type { JsGridTableColumn } from "../type/Type.ts";
 
@@ -163,6 +168,7 @@ function HeaderColumnResizeHandle({
     };
     return (
         <div
+            className="js-grid-col-resize"
             data-jsgrid-col-resize="1"
             role="separator"
             aria-orientation="vertical"
@@ -682,6 +688,7 @@ export default function JsGridTable(props: Props) {
     return (
         <div
             ref={scrollRef}
+            className="js-grid-table-scroll"
             style={{ overflow: "auto", flex: 1, minHeight: 0, outline: "none" }}
             tabIndex={-1}
         >
@@ -697,6 +704,7 @@ export default function JsGridTable(props: Props) {
             >
                 <table
                     ref={headTableRef}
+                    className="js-grid-table"
                     style={{
                         width: totalGridWidth > 0 ? totalGridWidth : "max-content",
                         tableLayout: "fixed",
@@ -712,7 +720,7 @@ export default function JsGridTable(props: Props) {
                         </colgroup>
                     ) : null}
                     <thead style={{ backgroundColor: "#f8f8f8" }}>
-                    <tr>
+                    <tr className="js-grid-head-row">
                         {props.columns.map((column, cdex) => {
                             const isRowNum = Boolean(column.__rownum__);
                             const isCheckbox = Boolean(column.__checkbox__);
@@ -731,6 +739,7 @@ export default function JsGridTable(props: Props) {
                             return (
                                 <th
                                     key={colKey}
+                                    className={gridColClassNames(cdex, column, "th")}
                                     ref={(el) => {
                                         props.headerCellRefs.current[cdex] = el;
                                     }}
@@ -810,6 +819,7 @@ export default function JsGridTable(props: Props) {
                                         >
                                             <input
                                                 type="checkbox"
+                                                className="js-grid-chk-box"
                                                 checked={props.rowSelection.headerChecked}
                                                 disabled={props.rowSelection.pageRowIds.length === 0}
                                                 readOnly
@@ -818,6 +828,7 @@ export default function JsGridTable(props: Props) {
                                         </div>
                                     ) : (
                                         <div
+                                            className="js-grid-cell-inner"
                                             style={{
                                                 display: "flex",
                                                 alignItems: "center",
@@ -936,6 +947,7 @@ export default function JsGridTable(props: Props) {
 
             <div
                 role="rowgroup"
+                className="js-grid-body"
                 style={{
                     position: "relative",
                     zIndex: 0,
@@ -947,11 +959,13 @@ export default function JsGridTable(props: Props) {
                 {rowVirtualizer.getVirtualItems().map((vr) => {
                     const rdex = vr.index;
                     const row = props.data[rdex];
+                    const rowId = resolveRowId(row, rowIdKey);
                     return (
                         <div
                             key={vr.key}
                             role="row"
                             aria-rowindex={rdex + 2}
+                            className={bodyRowClassName(rdex, rowId)}
                             style={{
                                 position: "absolute",
                                 top: vr.start,
@@ -1175,12 +1189,14 @@ export default function JsGridTable(props: Props) {
                                     isCheckbox && props.rowSelection ? (
                                         <input
                                             type="checkbox"
+                                            className="js-grid-chk-box"
                                             checked={props.rowSelection.selectedIds.has(rdex)}
                                             readOnly
                                             style={{ pointerEvents: "none" }}
                                         />
                                     ) : isEditing && column.editor ? (
                                         <div
+                                            className="js-grid-cell-inner js-grid-cell-inner--editing"
                                             data-jsgrid-cell-editing="1"
                                             style={{
                                                 width: "100%",
@@ -1212,11 +1228,24 @@ export default function JsGridTable(props: Props) {
                                       }
                                     : undefined;
 
+                                const bodyCellClassName = [
+                                    gridColClassNames(cdex, column, "td"),
+                                    bodyCellStateClassNames({
+                                        selectable,
+                                        hasEditor,
+                                        isSelected,
+                                        isEditing,
+                                    }),
+                                ]
+                                    .filter(Boolean)
+                                    .join(" ");
+
                                 if (isCheckbox || isRowNum) {
                                     return (
                                         <div
                                             key={colKey}
                                             role="presentation"
+                                            className={bodyCellClassName}
                                             onClick={onCellClick}
                                             onPointerDown={onCellPointerDown}
                                             style={tdStyle}
@@ -1231,6 +1260,7 @@ export default function JsGridTable(props: Props) {
                                         <div
                                             key={colKey}
                                             role="presentation"
+                                            className={bodyCellClassName}
                                             onClick={onCellClick}
                                             onPointerDown={onCellPointerDown}
                                             style={tdStyle}
@@ -1243,6 +1273,7 @@ export default function JsGridTable(props: Props) {
                                 return (
                                     <TruncatingDiv
                                         key={colKey}
+                                        className={bodyCellClassName}
                                         onClick={onCellClick}
                                         onPointerDown={onCellPointerDown}
                                         style={tdStyle}
@@ -1260,6 +1291,7 @@ export default function JsGridTable(props: Props) {
                 <div
                     role="status"
                     aria-live="polite"
+                    className="js-grid-empty"
                     style={{
                         boxSizing: "border-box",
                         width: totalGridWidth > 0 ? totalGridWidth : "100%",
@@ -1272,7 +1304,7 @@ export default function JsGridTable(props: Props) {
                         fontSize: 13,
                     }}
                 >
-                    데이터가 없습니다.
+                    <span className="js-grid-empty-message">데이터가 없습니다.</span>
                 </div>
             ) : null}
         </div>

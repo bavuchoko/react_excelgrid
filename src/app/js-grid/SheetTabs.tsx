@@ -115,7 +115,7 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
     return (
         <div
             ref={scrollRef}
-            className="sheetTabsScroll"
+            className="js-grid-sheet-tabs sheetTabsScroll"
             onPointerDown={onScrollTrackPointerDown}
             onPointerMove={onScrollTrackPointerMove}
             onPointerUp={endScrollDrag}
@@ -146,6 +146,13 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
                     <div
                         key={`${label}\u0000${i}`}
                         data-sheet-index={i}
+                        className={[
+                            "js-grid-sheet-tab",
+                            active ? "js-grid-sheet-tab-active" : "",
+                            sheetHasErrors ? "js-grid-sheet-tab-has-error" : "",
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
                         title={sheetHasErrors ? `${label}: 검증 오류 있음` : label}
                         style={{
                             flexShrink: 0,
