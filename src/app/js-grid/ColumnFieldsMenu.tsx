@@ -82,9 +82,11 @@ type Props = {
     dragKeyRef: MutableRefObject<string | null>;
     onReorder: (fromKey: string, toKey: string) => void;
     onToggleVisible: (key: string, visible: boolean) => void;
-    /** `onHeaderSave`가 있을 때 초기화 버튼 표시(로컬 컬럼 복원 + 선택적 `onHeaderReset`). */
+    /** `false`(기본)이면 저장·초기화 버튼 영역을 숨긴다. */
+    showSaveActions?: boolean;
+    /** 저장·초기화 표시 시 초기화(로컬 컬럼 복원 + 선택적 `onHeaderReset`). */
     onReset?: () => void | Promise<void>;
-    onSave: () => void | Promise<void>;
+    onSave?: () => void | Promise<void>;
     saveBusy?: boolean;
     resetBusy?: boolean;
     saveError?: string | null;
@@ -190,80 +192,86 @@ export default function ColumnFieldsMenu(props: Props) {
                 ))}
             </div>
 
-            <div style={{ padding: '8px 12px 0' }}>
-                {props.saveError ? (
-                    <div
-                        role="alert"
-                        style={{
-                            marginBottom: 8,
-                            fontSize: 12,
-                            color: '#b91c1c',
-                            lineHeight: 1.35,
-                            wordBreak: 'break-word',
-                        }}
-                    >
-                        {props.saveError}
+            {props.showSaveActions ? (
+                <>
+                    <div style={{ padding: '8px 12px 0' }}>
+                        {props.saveError ? (
+                            <div
+                                role="alert"
+                                style={{
+                                    marginBottom: 8,
+                                    fontSize: 12,
+                                    color: '#b91c1c',
+                                    lineHeight: 1.35,
+                                    wordBreak: 'break-word',
+                                }}
+                            >
+                                {props.saveError}
+                            </div>
+                        ) : null}
                     </div>
-                ) : null}
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "8px 12px 2px" }}>
-                {props.onReset ? (
-                    <FieldsMenuActionButton
-                        busy={resetBusy}
-                        busyLabel="초기화 중…"
-                        spinClass={resetSpinClass}
-                        disabled={actionBusy}
-                        onClick={handleResetClick}
-                        style={{
-                            fontSize: 12,
-                            padding: "4px 10px",
-                            border: "1px solid #bdc2c9",
-                            backgroundColor: "#f8f8f8",
-                            borderRadius: 6,
-                            cursor: actionBusy ? "wait" : "pointer",
-                            opacity: actionBusy && !resetBusy ? 0.6 : 1,
-                            whiteSpace: "nowrap",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 4,
-                            boxSizing: "border-box",
-                            minWidth: 88,
-                        }}
-                    >
-                        <Reset style={{ width: 16, height: 16, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, lineHeight: 1 }}>초기화</span>
-                    </FieldsMenuActionButton>
-                ) : null}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "8px 12px 2px" }}>
+                        {props.onReset ? (
+                            <FieldsMenuActionButton
+                                busy={resetBusy}
+                                busyLabel="초기화 중…"
+                                spinClass={resetSpinClass}
+                                disabled={actionBusy}
+                                onClick={handleResetClick}
+                                style={{
+                                    fontSize: 12,
+                                    padding: "4px 10px",
+                                    border: "1px solid #bdc2c9",
+                                    backgroundColor: "#f8f8f8",
+                                    borderRadius: 6,
+                                    cursor: actionBusy ? "wait" : "pointer",
+                                    opacity: actionBusy && !resetBusy ? 0.6 : 1,
+                                    whiteSpace: "nowrap",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: 4,
+                                    boxSizing: "border-box",
+                                    minWidth: 88,
+                                }}
+                            >
+                                <Reset style={{ width: 16, height: 16, flexShrink: 0 }} />
+                                <span style={{ fontSize: 12, lineHeight: 1 }}>초기화</span>
+                            </FieldsMenuActionButton>
+                        ) : null}
 
-                <FieldsMenuActionButton
-                    busy={Boolean(props.saveBusy)}
-                    busyLabel="저장 중…"
-                    spinClass={saveSpinClass}
-                    disabled={actionBusy}
-                    onClick={() => void props.onSave()}
-                    style={{
-                        fontSize: 12,
-                        padding: "4px 10px",
-                        border: "1px solid #1d4ed8",
-                        backgroundColor: "#1d4ed8",
-                        color: "#ffffff",
-                        borderRadius: 6,
-                        cursor: actionBusy ? "wait" : "pointer",
-                        opacity: actionBusy && !props.saveBusy ? 0.85 : 1,
-                        whiteSpace: "nowrap",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 4,
-                        boxSizing: "border-box",
-                        minWidth: 76,
-                    }}
-                >
-                    <Disk style={{ width: 16, height: 16, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, lineHeight: 1 }}>저장</span>
-                </FieldsMenuActionButton>
-            </div>
+                        {props.onSave ? (
+                            <FieldsMenuActionButton
+                                busy={Boolean(props.saveBusy)}
+                                busyLabel="저장 중…"
+                                spinClass={saveSpinClass}
+                                disabled={actionBusy}
+                                onClick={() => void props.onSave?.()}
+                                style={{
+                                    fontSize: 12,
+                                    padding: "4px 10px",
+                                    border: "1px solid #1d4ed8",
+                                    backgroundColor: "#1d4ed8",
+                                    color: "#ffffff",
+                                    borderRadius: 6,
+                                    cursor: actionBusy ? "wait" : "pointer",
+                                    opacity: actionBusy && !props.saveBusy ? 0.85 : 1,
+                                    whiteSpace: "nowrap",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: 4,
+                                    boxSizing: "border-box",
+                                    minWidth: 76,
+                                }}
+                            >
+                                <Disk style={{ width: 16, height: 16, flexShrink: 0 }} />
+                                <span style={{ fontSize: 12, lineHeight: 1 }}>저장</span>
+                            </FieldsMenuActionButton>
+                        ) : null}
+                    </div>
+                </>
+            ) : null}
         </div>
     );
 }

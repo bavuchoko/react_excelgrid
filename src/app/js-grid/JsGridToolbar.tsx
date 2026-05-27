@@ -9,10 +9,14 @@ import ColumnLock from "../resources/icon/ColumnLock.tsx";
 type Props = {
     fieldsBtnRef: RefObject<HTMLDivElement | null>;
     onToggleFieldsMenu: (e: MouseEvent) => void;
-    onTogglePseudoFullscreen: () => void;
+    onEnterPseudoFullscreen: () => void;
+    /** 축소 버튼 — `onClose`가 있으면 그리드는 `onExitPseudoFullscreen`에서 처리한다. */
+    onExitPseudoFullscreen: () => void;
     isPseudoFullscreen: boolean;
     enablePseudoFullscreen?: boolean;
-    /** `onHeaderSave`를 넘긴 경우에만 컬럼(필드) 메뉴 버튼을 표시한다. */
+    /** `onClose` 전달 시 축소 버튼 툴팁(기본: "전체 화면 종료"). */
+    exitPseudoFullscreenHint?: string;
+    /** 컬럼(필드) 메뉴 버튼 표시 여부(기본 `true`). */
     showColumnFieldsMenu?: boolean;
     /** 컬럼 저장·초기화 API 처리 중일 때 필드 아이콘 로딩 표시 */
     fieldsBusy?: boolean;
@@ -25,10 +29,12 @@ type Props = {
 export default function JsGridToolbar({
     fieldsBtnRef,
     onToggleFieldsMenu,
-    onTogglePseudoFullscreen,
+    onEnterPseudoFullscreen,
+    onExitPseudoFullscreen,
     isPseudoFullscreen,
     enablePseudoFullscreen,
-    showColumnFieldsMenu = false,
+    exitPseudoFullscreenHint = "전체 화면 종료",
+    showColumnFieldsMenu = true,
     fieldsBusy,
     fieldsBusyLabel,
     toolbarStart,
@@ -165,17 +171,17 @@ export default function JsGridToolbar({
 
                     {showPseudoFullscreen && (
                         isPseudoFullscreen ? (
-                            <ToolbarHint text="전체 화면 종료">
+                            <ToolbarHint text={exitPseudoFullscreenHint}>
                                 <Shrink
                                     style={{width: '18px', cursor: 'pointer'}}
-                                    onClick={onTogglePseudoFullscreen}
+                                    onClick={onExitPseudoFullscreen}
                                 />
                             </ToolbarHint>
                         ) : (
                             <ToolbarHint text="전체 화면">
                                 <Expand
                                     style={{width: '18px', cursor: 'pointer'}}
-                                    onClick={onTogglePseudoFullscreen}
+                                    onClick={onEnterPseudoFullscreen}
                                 />
                             </ToolbarHint>
                         )

@@ -1,11 +1,11 @@
-import { JsExcelGrid, applyHeaderStateToExcelGridData } from "./app/index.ts";
+import { JsExcelGrid } from "./app/index.ts";
 import type {
     ExcelGridData,
     GridCellEditorArgs,
     Header,
-    SheetHeaderSavePayload,
 } from "./app/index.ts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JsExcelGridHandle } from "./app/index.ts";
 import { SAMPLE_DATA } from "./testData.ts";
 
 /** 텍스트 셀 편집기 — Enter 또는 blur 시 값 적용. */
@@ -125,31 +125,16 @@ function withDemoEditors(data: ExcelGridData): ExcelGridData {
 }
 
 const App = () => {
-    const [data, setData] = useState<ExcelGridData>(SAMPLE_DATA);
+    const [data] = useState<ExcelGridData>(SAMPLE_DATA);
+    const gridRef = useRef<JsExcelGridHandle | null>(null);
     const dataWithEditors = useMemo(() => withDemoEditors(data), [data]);
-
-    const headerApi = useCallback(async (payload: SheetHeaderSavePayload) => {
-        console.log("header 저장 요청", payload.sheetName, payload.headers.length, "건");
-        await new Promise((r) => setTimeout(r, 300));
-    }, []);
-
-    const onHeaderSave = useCallback(
-        async (payload: SheetHeaderSavePayload) => {
-            await headerApi(payload);
-            setData((prev) => applyHeaderStateToExcelGridData({ data: prev, payload }));
-        },
-        [headerApi],
-    );
-
-    const onHeaderReset = useCallback(async () => {
-        console.log("reset clicked");
-        await new Promise((r) => setTimeout(r, 300));
-    }, []);
 
     const isAdmin = true;
 
     return (
         <div>
+
+            <div onClick={() => console.log(gridRef.current?.getData())}>버튼</div>
             <div
                 style={{
                     width: "1200px",
@@ -160,10 +145,12 @@ const App = () => {
                 }}
             >
                 <JsExcelGrid
+                    fullmode={true}
+                    onClose={()=>console.log(gridRef.current?.getData())}
+                    ref={gridRef}
                     data={dataWithEditors}
-                    onHeaderSave={isAdmin ? onHeaderSave : undefined}
-                    onHeaderReset={onHeaderReset}
                     editable={isAdmin}
+                    resizable={true}
                     onCellChange={(v)=>console.log(v)}
                 />
             </div>

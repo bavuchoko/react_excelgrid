@@ -7,6 +7,7 @@ import type {
     GridType,
     Header,
     HeaderState,
+    JsExcelGridHandle,
     JsGridTableColumn,
     JsGridTableHandle,
     JsGridToolbarSlot,
@@ -15,7 +16,7 @@ import type {
     SheetCellPasteBatch,
     SheetErrorFocusTarget,
 } from "./type/Type.ts";
-import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState} from "react";
 import { JsGridToolbarProvider } from "./js-grid/JsGridToolbarContext.tsx";
 import {
     JsGridRowSelectionProvider,
@@ -25,6 +26,7 @@ import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
 import {
     columnWidthsToKeyMap,
+    columnsWidthSignature,
     computeLeftOffsets,
     getColumnFreezeStickyStyle,
 } from "./js-grid/columnLayout.ts";
@@ -41,6 +43,7 @@ import { filterChangedPasteBatches, resolveChangeRowId } from "./js-grid/gridCel
 import { areCellValuesEqual } from "./js-grid/cellModified.ts";
 import { sortRowsByHeader } from "./js-grid/sortSheetContent.ts";
 import { applySheetCellEdit, applySheetCellsPaste } from "./utils/applySheetCellEdits.ts";
+import { applyHeaderLayoutToHeaders } from "./utils/applyHeaderState.ts";
 
 /**
  * 화면·필드 메뉴 모두에서 항상 숨기는 헤더 키 목록.
@@ -50,6 +53,14 @@ const ALWAYS_HIDDEN_HEADER_KEYS: ReadonlySet<string> = new Set(["id"]);
 
 function isHiddenHeaderKey(key: string): boolean {
     return ALWAYS_HIDDEN_HEADER_KEYS.has(key);
+}
+
+function userColumnsLayoutEqual(a: readonly UserColumn[], b: readonly UserColumn[]): boolean {
+    if (a.length !== b.length) return false;
+    return a.every((c, i) => {
+        const o = b[i]!;
+        return c.key === o.key && c.visible === o.visible && c.label === o.label;
+    });
 }
 
 function headerSaveErrorMessage(err: unknown): string {
@@ -66,12 +77,92 @@ function headerSaveErrorMessage(err: unknown): string {
     return "컬럼 저장에 실패했습니다.";
 }
 
-export default function JsExcelGrid(props: GridType) {
+export default function  JsExcelGrid(props: GridType) {
     const [gridData, setGridData] = useState<ExcelGridData>(() => props.data ?? {});
+    const gridDataRef = useRef(gridData);
+    gridDataRef.current = gridData;
     const baselineBySheetRef = useRef<Record<string, Content[]>>({});
+    const [sheetColumnState, setSheetColumnState] = useState<Record<string, {
+        userColumns: UserColumn[];
+        colWidths: Record<string, number>;
+    }>>({});
+    const sheetColumnStateRef = useRef(sheetColumnState);
+    sheetColumnStateRef.current = sheetColumnState;
+
+    const buildDataWithColumnLayout = useCallback((data: ExcelGridData): ExcelGridData => {
+        const layoutBySheet = sheetColumnStateRef.current;
+        let out: ExcelGridData | null = null;
+        for (const [sheetName, sheet] of Object.entries(data)) {
+            const saved = layoutBySheet[sheetName];
+            if (!saved?.userColumns?.length) continue;
+            const nextHeaders = applyHeaderLayoutToHeaders({
+                headers: sheet.headers,
+                layout: toHeaderState(saved.userColumns, saved.colWidths),
+                pinnedHeaderKeys: ALWAYS_HIDDEN_HEADER_KEYS,
+            });
+            if (out === null) out = { ...data };
+            out[sheetName] = { ...sheet, headers: nextHeaders };
+        }
+        return out ?? data;
+    }, []);
+
+    useImperativeHandle(
+        props.ref,
+        (): JsExcelGridHandle => ({
+            getData: () => gridDataRef.current,
+        }),
+        [],
+    );
+
+    const commitGridData = useCallback(
+        (updater: (prev: ExcelGridData) => ExcelGridData) => {
+            setGridData((prev) => {
+                const next = updater(prev);
+                gridDataRef.current = next;
+                props.onDataChange?.(buildDataWithColumnLayout(next));
+                return next;
+            });
+        },
+        [props.onDataChange, buildDataWithColumnLayout],
+    );
+
+    const syncSheetHeaderLayout = useCallback(
+        (
+            sheetName: string | null,
+            columns: UserColumn[],
+            widths: Record<string, number>,
+        ) => {
+            if (!sheetName || columns.length === 0) return;
+            const layout = toHeaderState(columns, widths);
+            commitGridData((prev) => {
+                const sheet = prev[sheetName];
+                if (!sheet) return prev;
+                const nextHeaders = applyHeaderLayoutToHeaders({
+                    headers: sheet.headers,
+                    layout,
+                    pinnedHeaderKeys: ALWAYS_HIDDEN_HEADER_KEYS,
+                });
+                const unchanged =
+                    sheet.headers.length === nextHeaders.length
+                    && sheet.headers.every((h, i) => {
+                        const n = nextHeaders[i]!;
+                        return (
+                            h.key === n.key
+                            && Boolean(h.visible ?? true) === Boolean(n.visible ?? true)
+                            && (h.width ?? 0) === (n.width ?? 0)
+                        );
+                    });
+                if (unchanged) return prev;
+                return { ...prev, [sheetName]: { ...sheet, headers: nextHeaders } };
+            });
+        },
+        [commitGridData],
+    );
 
     useEffect(() => {
-        setGridData(props.data ?? {});
+        const next = props.data ?? {};
+        gridDataRef.current = next;
+        setGridData(next);
         baselineBySheetRef.current = {};
     }, [props.data]);
 
@@ -87,10 +178,6 @@ export default function JsExcelGrid(props: GridType) {
     }, [gridData]);
 
     const [activeSheetName, setActiveSheetName] = useState<string | null>(null);
-    const [sheetColumnState, setSheetColumnState] = useState<Record<string, {
-        userColumns: UserColumn[];
-        colWidths: Record<string, number>;
-    }>>({});
 
     useEffect(() => {
         if (sheets.length === 0) {
@@ -189,43 +276,71 @@ export default function JsExcelGrid(props: GridType) {
     );
 
     const enablePseudoFullscreen = props.enablePseudoFullscreen !== false;
-    const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
+    const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(
+        () => enablePseudoFullscreen && props.fullmode === true,
+    );
     const rootRef = useRef<HTMLDivElement | null>(null);
     const gridOverlaySpinClass = useId().replace(/:/g, "");
 
     const [userColumns, setUserColumns] = useState<UserColumn[]>([]);
 
-    const keysSig = useMemo(
-        () => headerList.map((h) => h.key).join('\u0001'),
-        [headerList],
-    );
-    useEffect(() => {
-        if (!activeName) return;
+    /** 열 구성(키 집합) 변경 시에만 필드 메뉴 state 초기화 — 순서 변경과 분리해 되돌림 방지 */
+    const columnKeysSig = useMemo(() => {
+        const keys = headerList
+            .filter((h) => !isHiddenHeaderKey(h.key))
+            .map((h) => h.key);
+        return [...new Set(keys)].sort().join("\0");
+    }, [headerList]);
+
+    const buildUserColumnsForActiveSheet = useCallback((): UserColumn[] => {
         const candidates = headerList.filter((h) => !isHiddenHeaderKey(h.key));
-        const saved = sheetColumnState[activeName];
+        const saved = activeName ? sheetColumnStateRef.current[activeName] : undefined;
         if (saved?.userColumns?.length) {
             const savedByKey = new Map(saved.userColumns.map((c) => [c.key, c] as const));
-            const next: UserColumn[] = candidates.map((h) => {
-                const k = h.key;
+            const candidateByKey = new Map(candidates.map((h) => [h.key, h] as const));
+            const orderedKeys: string[] = [];
+            for (const s of saved.userColumns) {
+                if (candidateByKey.has(s.key)) orderedKeys.push(s.key);
+            }
+            for (const h of candidates) {
+                if (!savedByKey.has(h.key)) orderedKeys.push(h.key);
+            }
+            return orderedKeys.map((k) => {
+                const h = candidateByKey.get(k)!;
                 const s = savedByKey.get(k);
                 return {
                     key: k,
                     label: String(h.name ?? k),
-                    visible: s?.visible ?? true,
+                    visible: s?.visible ?? (h.visible ?? true),
                 };
             });
-            setUserColumns(next);
-        } else {
-            setUserColumns(
-                candidates.map((h) => ({
-                    key: h.key,
-                    label: String(h.name ?? h.key),
-                    visible: true,
-                })),
-            );
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeName, keysSig]);
+        return candidates.map((h) => ({
+            key: h.key,
+            label: String(h.name ?? h.key),
+            visible: h.visible ?? true,
+        }));
+    }, [activeName, headerList]);
+
+    useEffect(() => {
+        if (!activeName) return;
+        const next = buildUserColumnsForActiveSheet();
+        setUserColumns((prev) =>
+            userColumnsLayoutEqual(prev, next) ? prev : next,
+        );
+    }, [activeName, columnKeysSig, buildUserColumnsForActiveSheet]);
+
+    const handleEnterPseudoFullscreen = useCallback(() => {
+        setIsPseudoFullscreen(true);
+    }, []);
+
+    const handleExitPseudoFullscreen = useCallback(() => {
+        if (props.onClose) {
+            props.onClose();
+            return;
+        }
+        setIsPseudoFullscreen(false);
+    }, [props.onClose]);
 
     useEffect(() => {
         if (!enablePseudoFullscreen) return;
@@ -235,7 +350,7 @@ export default function JsExcelGrid(props: GridType) {
         document.body.style.overflow = 'hidden';
 
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setIsPseudoFullscreen(false);
+            if (e.key === 'Escape') handleExitPseudoFullscreen();
         };
         window.addEventListener('keydown', onKeyDown);
 
@@ -243,7 +358,7 @@ export default function JsExcelGrid(props: GridType) {
             window.removeEventListener('keydown', onKeyDown);
             document.body.style.overflow = prevOverflow;
         };
-    }, [enablePseudoFullscreen, isPseudoFullscreen]);
+    }, [enablePseudoFullscreen, isPseudoFullscreen, handleExitPseudoFullscreen]);
 
     const showRowSelection = props.enableRowSelection === true;
 
@@ -331,11 +446,35 @@ export default function JsExcelGrid(props: GridType) {
         headerWidthSig,
     );
 
-    const [layoutColumnWidths, setLayoutColumnWidths] = useState<readonly number[]>([]);
-    const layoutWidthByKey = useMemo(
-        () => columnWidthsToKeyMap(columns, layoutColumnWidths),
-        [columns, layoutColumnWidths],
+    const applyUserColumnsLayout = useCallback(
+        (nextColumns: UserColumn[], widths: Record<string, number> = colWidthByKey) => {
+            if (!activeName || nextColumns.length === 0) return;
+            setSheetColumnState((prev) => ({
+                ...prev,
+                [activeName]: { userColumns: nextColumns, colWidths: widths },
+            }));
+            syncSheetHeaderLayout(activeName, nextColumns, widths);
+        },
+        [activeName, colWidthByKey, syncSheetHeaderLayout],
     );
+
+    useEffect(() => {
+        if (!activeName || userColumns.length === 0) return;
+        applyUserColumnsLayout(userColumns, colWidthByKey);
+    }, [activeName, userColumns, colWidthByKey, applyUserColumnsLayout]);
+
+    const [layoutColumnWidths, setLayoutColumnWidths] = useState<readonly number[]>([]);
+    const columnsWidthSig = useMemo(() => columnsWidthSignature(columns), [columns]);
+    useLayoutEffect(() => {
+        setLayoutColumnWidths([]);
+    }, [columnsWidthSig]);
+    const layoutWidthByKey = useMemo(() => {
+        const fromLayout =
+            layoutColumnWidths.length === columns.length
+                ? columnWidthsToKeyMap(columns, layoutColumnWidths)
+                : {};
+        return { ...fromLayout, ...colWidthByKey };
+    }, [columns, layoutColumnWidths, colWidthByKey]);
     const leftOffsets = useMemo(
         () => computeLeftOffsets(columns, layoutWidthByKey),
         [columns, layoutWidthByKey],
@@ -346,6 +485,26 @@ export default function JsExcelGrid(props: GridType) {
             prev.length === widths.length && prev.every((w, i) => w === widths[i]) ? prev : widths,
         );
     }, []);
+
+    const columnResizable = props.resizable !== false;
+
+    const handleColumnWidthChange = useCallback(
+        (columnKey: string, widthPx: number) => {
+            setColumnWidth(columnKey, widthPx);
+            if (!activeName) return;
+            setSheetColumnState((prev) => {
+                const sheet = prev[activeName];
+                return {
+                    ...prev,
+                    [activeName]: {
+                        userColumns: sheet?.userColumns ?? userColumns,
+                        colWidths: { ...(sheet?.colWidths ?? {}), [columnKey]: widthPx },
+                    },
+                };
+            });
+        },
+        [activeName, setColumnWidth, userColumns],
+    );
 
     const getStickyStyle = useCallback((args: { colIndex: number; isHeader: boolean }) => {
         return getColumnFreezeStickyStyle({
@@ -448,7 +607,14 @@ export default function JsExcelGrid(props: GridType) {
         };
     }, [showRowSelection, pageRowIds, selectedRowIndexes, headerChecked, toggleSelectAll, toggleSelectRow]);
 
-    const fieldsBusyLabel = fieldsSaveBusy ? "저장 중..." : fieldsResetBusy ? "초기화 중..." : undefined;
+    const headerSaveEnabled = props.enableHeaderSave === true && Boolean(props.onHeaderSave);
+    const fieldsBusyLabel = headerSaveEnabled
+        ? fieldsSaveBusy
+            ? "저장 중..."
+            : fieldsResetBusy
+              ? "초기화 중..."
+              : undefined
+        : undefined;
 
     const [toolbarOverlay, setToolbarOverlay] = useState<{ label: string; accent: string } | null>(null);
 
@@ -504,7 +670,7 @@ export default function JsExcelGrid(props: GridType) {
             }
             const rowId = resolveChangeRowId(event.row, event.sourceRowIndex, rowIdKey);
             const rowIds = rowId != null ? [rowId] : [];
-            setGridData((prev) => applySheetCellEdit(prev, activeName, event));
+            commitGridData((prev) => applySheetCellEdit(prev, activeName, event));
             if (rowIds.length === 0) return;
             const sheetEvent: SheetCellChangeEvent = {
                 kind: "edit",
@@ -516,7 +682,7 @@ export default function JsExcelGrid(props: GridType) {
             };
             void Promise.resolve(props.onCellChange?.(sheetEvent));
         },
-        [props.onCellChange, activeName, markCellDirty, rowIdKey],
+        [props.onCellChange, activeName, markCellDirty, rowIdKey, commitGridData],
     );
 
     const tableCellsPaste = useCallback(
@@ -536,7 +702,7 @@ export default function JsExcelGrid(props: GridType) {
                 sheetName: activeName,
                 items: b.items.map((it) => ({ ...it, sheetName: activeName })),
             }));
-            setGridData((prev) => applySheetCellsPaste(prev, sheetBatches));
+            commitGridData((prev) => applySheetCellsPaste(prev, sheetBatches));
             for (const batch of sheetBatches) {
                 if (batch.rowIds.length === 0) continue;
                 const pasteEvent: SheetCellChangeEvent = {
@@ -550,7 +716,7 @@ export default function JsExcelGrid(props: GridType) {
             }
             void Promise.resolve(props.onCellsPaste?.(sheetBatches));
         },
-        [props.onCellChange, props.onCellsPaste, activeName, markCellDirty],
+        [props.onCellChange, props.onCellsPaste, activeName, markCellDirty, commitGridData],
     );
 
     /** 시트 에러 바에서 셀로 점프하기 위한 명령형 ref. */
@@ -591,10 +757,10 @@ export default function JsExcelGrid(props: GridType) {
 
     const gridBodyOverlay = useMemo(() => {
         if (toolbarOverlay) return toolbarOverlay;
-        if (fieldsSaveBusy) return { label: "저장 중...", accent: "#2563eb" };
-        if (fieldsResetBusy) return { label: "초기화 중...", accent: "#2563eb" };
+        if (headerSaveEnabled && fieldsSaveBusy) return { label: "저장 중...", accent: "#2563eb" };
+        if (headerSaveEnabled && fieldsResetBusy) return { label: "초기화 중...", accent: "#2563eb" };
         return null;
-    }, [toolbarOverlay, fieldsSaveBusy, fieldsResetBusy]);
+    }, [toolbarOverlay, headerSaveEnabled, fieldsSaveBusy, fieldsResetBusy]);
     const gridBodyBusy = gridBodyOverlay != null;
 
     return (
@@ -639,15 +805,14 @@ export default function JsExcelGrid(props: GridType) {
                     `}</style>
                     <JsGridToolbar
                         fieldsBtnRef={fieldsBtnRef}
-                        showColumnFieldsMenu={Boolean(props.onHeaderSave)}
+                        showColumnFieldsMenu
                         isPseudoFullscreen={isPseudoFullscreen}
                         enablePseudoFullscreen={enablePseudoFullscreen}
-                        fieldsBusy={props.onHeaderSave ? fieldsActionBusy : undefined}
+                        fieldsBusy={headerSaveEnabled ? fieldsActionBusy : undefined}
                         fieldsBusyLabel={fieldsBusyLabel}
                         onToggleFieldsMenu={(e) => {
                             e.stopPropagation();
-                            if (!props.onHeaderSave) return;
-                            if (fieldsActionBusy) return;
+                            if (headerSaveEnabled && fieldsActionBusy) return;
                             const rect = fieldsBtnRef.current?.getBoundingClientRect();
                             if (rect) {
                                 setFieldsMenuPos({
@@ -657,7 +822,8 @@ export default function JsExcelGrid(props: GridType) {
                             }
                             setIsFieldsMenuOpen(v => !v);
                         }}
-                        onTogglePseudoFullscreen={() => setIsPseudoFullscreen(v => !v)}
+                        onEnterPseudoFullscreen={handleEnterPseudoFullscreen}
+                        onExitPseudoFullscreen={handleExitPseudoFullscreen}
                         toolbarStart={toolbarStartNode}
                         toolbarEnd={toolbarEndNode}
                     />
@@ -697,6 +863,7 @@ export default function JsExcelGrid(props: GridType) {
                             pos={fieldsMenuPos}
                             userColumns={userColumns}
                             dragKeyRef={dragKeyRef}
+                            showSaveActions={headerSaveEnabled}
                             saveBusy={fieldsSaveBusy}
                             resetBusy={fieldsResetBusy}
                             saveError={fieldsSaveError}
@@ -708,14 +875,19 @@ export default function JsExcelGrid(props: GridType) {
                                     const next = [...prev];
                                     const [moved] = next.splice(fromIdx, 1);
                                     next.splice(toIdx, 0, moved);
+                                    applyUserColumnsLayout(next);
                                     return next;
                                 });
                             }}
                             onToggleVisible={(key, visible) => {
-                                setUserColumns((prev) => prev.map(x => x.key === key ? { ...x, visible } : x));
+                                setUserColumns((prev) => {
+                                    const next = prev.map(x => x.key === key ? { ...x, visible } : x);
+                                    applyUserColumnsLayout(next);
+                                    return next;
+                                });
                             }}
                             onReset={
-                                props.onHeaderSave
+                                headerSaveEnabled
                                     ? async () => {
                                         setFieldsSaveError(null);
                                         setFieldsResetBusy(true);
@@ -748,7 +920,9 @@ export default function JsExcelGrid(props: GridType) {
                                     }
                                     : undefined
                             }
-                            onSave={async () => {
+                            onSave={
+                                headerSaveEnabled
+                                    ? async () => {
                                 const payload: HeaderState[] = toHeaderState(userColumns, colWidthByKey);
                                 if (!props.onHeaderSave || !activeName) {
                                     setIsFieldsMenuOpen(false);
@@ -774,7 +948,9 @@ export default function JsExcelGrid(props: GridType) {
                                 } finally {
                                     setFieldsSaveBusy(false);
                                 }
-                            }}
+                            }
+                                    : undefined
+                            }
                         />
 
                         <div
@@ -819,7 +995,10 @@ export default function JsExcelGrid(props: GridType) {
                                     sortDir={sortDir}
                                     headerCellRefs={headerCellRefs}
                                     colWidthByKey={colWidthByKey}
-                                    onColumnWidthChange={setColumnWidth}
+                                    columnResizable={columnResizable}
+                                    onColumnWidthChange={
+                                        columnResizable ? handleColumnWidthChange : undefined
+                                    }
                                     onLayoutColumnWidths={onLayoutColumnWidths}
                                     setFreezeUntilIndex={setFreezeUntilIndex}
                                     getStickyStyle={getStickyStyle}

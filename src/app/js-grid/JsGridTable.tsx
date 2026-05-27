@@ -1,6 +1,10 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { formatCellDisplayValue, getValue } from "../hook/CommonMethod.ts";
 import {
+    columnsWidthSignature,
+    widthByKeyMapsNearlyEqual,
+} from "./columnLayout.ts";
+import {
     CELL_MAX_WIDTH_PX,
     COL_RESIZE_MAX_PX,
     COL_RESIZE_MIN_PX,
@@ -22,6 +26,7 @@ import React, {
     useEffect,
     useImperativeHandle,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
 } from "react";
@@ -70,12 +75,6 @@ type CellDragState = {
 const SORT_ICON_PX = 14;
 /** tbody 행 높이(기존 `h-[30px]`과 동일) — 가변 행이면 후에 `measureElement`로 확장 */
 const ROW_HEIGHT_PX = 30;
-
-/** DOM에서 잰 너비가 같은지 비교(불필요한 setState 방지) */
-function widthsNearlyEqual(a: readonly number[], b: readonly number[]): boolean {
-    if (a.length !== b.length || b.length === 0) return false;
-    return a.every((x, i) => Math.abs(x - (b[i] ?? 0)) < 0.5);
-}
 
 function sumWidths(widths: readonly number[]): number {
     let s = 0;
@@ -143,11 +142,21 @@ function HeaderColumnResizeHandle({
             const raw = startW + (ev.clientX - startX);
             onResize(Math.round(Math.max(minPx, Math.min(maxPx, raw))));
         };
-        const up = () => {
+        const up = (ev: PointerEvent) => {
+            try {
+                (e.currentTarget as HTMLDivElement).releasePointerCapture(ev.pointerId);
+            } catch {
+                /* noop */
+            }
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", up);
             window.removeEventListener("pointercancel", up);
         };
+        try {
+            (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        } catch {
+            /* noop */
+        }
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);
         window.addEventListener("pointercancel", up);
@@ -164,11 +173,11 @@ function HeaderColumnResizeHandle({
                 right: 0,
                 top: 0,
                 bottom: 0,
-                width: 6,
+                width: 8,
                 cursor: "col-resize",
                 zIndex: 8,
                 touchAction: "none",
-                marginRight: -1,
+                marginRight: -2,
             }}
         />
     );
@@ -195,6 +204,8 @@ type Props = {
     getStickyStyle: (args: { colIndex: number; isHeader: boolean }) => CSSProperties | undefined;
     onSortChange: (next: { key: string; direction: "ASC" | "DESC" }) => void;
     rowSelection?: RowSelectionProps;
+    /** `true`(기본)이면 헤더 드래그로 열 너비 조절. */
+    columnResizable?: boolean;
     onColumnWidthChange?: (columnKey: string, widthPx: number) => void;
     /** `true` 일 때 셀 선택·재클릭 편집·세로 드래그·붙여넣기 동작 활성. */
     editable?: boolean;
@@ -232,8 +243,12 @@ type Props = {
 export default function JsGridTable(props: Props) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const headTableRef = useRef<HTMLTableElement>(null);
-    /** 헤더 `th`와 동일 픽셀 너비로 본문 열 정렬 — 테이블 자동 레이아웃이 단일 근본값 */
-    const [measuredColWidths, setMeasuredColWidths] = useState<number[]>([]);
+    /** 헤더에서 잰 기본 너비 — **열 key** 기준(순서 변경 시 인덱스 오염 방지). */
+    const [measuredWidthByKey, setMeasuredWidthByKey] = useState<Record<string, number>>({});
+    const columnsWidthSig = useMemo(
+        () => columnsWidthSignature(props.columns),
+        [props.columns],
+    );
 
     const editingEnabled = props.editable === true;
     const rowIdKey = props.rowIdKey ?? "id";
@@ -503,48 +518,86 @@ export default function JsGridTable(props: Props) {
         return () => window.removeEventListener("mousedown", onDown);
     }, [editingEnabled]);
 
+    useLayoutEffect(() => {
+        setMeasuredWidthByKey({});
+    }, [columnsWidthSig]);
+
     const syncColumnWidthsFromHeader = useCallback(() => {
         const n = props.columns.length;
         const cells = props.headerCellRefs.current;
         if (!cells.length || cells.length < n) return;
         const table = headTableRef.current;
-        const next: number[] = new Array<number>(n);
+        const nextByKey: Record<string, number> = {};
+        const nextByIndex: number[] = new Array<number>(n);
         for (let i = 0; i < n; i++) {
+            const colKey = String(props.columns[i]?.key ?? i);
             const el = cells[i];
             if (!el?.isConnected) {
-                next[i] = 0;
+                nextByIndex[i] = 0;
                 continue;
             }
             /** `offsetWidth` 정수 — `getBoundingClientRect` 소수 라운딩으로 헤더/본문 불일치 방지 */
             const ow = typeof el.offsetWidth === "number" ? el.offsetWidth : 0;
-            next[i] = ow > 0 ? ow : Math.round(el.getBoundingClientRect().width);
+            const w = ow > 0 ? ow : Math.round(el.getBoundingClientRect().width);
+            nextByIndex[i] = w;
+            if (w > 0) nextByKey[colKey] = w;
         }
-        if (next.some((w) => w <= 0)) return;
+        if (nextByIndex.some((w) => w <= 0)) return;
         /** 합계와 테이블 전체 픽셀 차(최대 2~3px)를 마지막 열에 흡수 — 세로 줄 1px 어긋남 완화 */
         if (table && n >= 1) {
             const tw = table.offsetWidth;
-            const sum = sumWidths(next);
+            const sum = sumWidths(nextByIndex);
             const diff = tw - sum;
             if (diff !== 0 && Math.abs(diff) <= 4) {
-                next[n - 1] = Math.max(COL_RESIZE_MIN_PX, next[n - 1] + diff);
+                const lastIdx = n - 1;
+                const lastKey = String(props.columns[lastIdx]?.key ?? lastIdx);
+                const adjusted = Math.max(COL_RESIZE_MIN_PX, nextByIndex[lastIdx] + diff);
+                nextByIndex[lastIdx] = adjusted;
+                nextByKey[lastKey] = adjusted;
             }
         }
-        setMeasuredColWidths((prev) => (widthsNearlyEqual(prev, next) ? prev : next));
-    }, [props.columns.length]);
+        setMeasuredWidthByKey((prev) =>
+            widthByKeyMapsNearlyEqual(prev, nextByKey) ? prev : nextByKey,
+        );
+    }, [props.columns]);
 
     useLayoutEffect(() => {
         syncColumnWidthsFromHeader();
-    }, [syncColumnWidthsFromHeader, props.colWidthByKey, props.sortKey, props.sortDir, props.columns.length]);
+    }, [
+        syncColumnWidthsFromHeader,
+        props.colWidthByKey,
+        props.sortKey,
+        props.sortDir,
+        columnsWidthSig,
+    ]);
 
     const colsLen = props.columns.length;
+    const columnResizable = props.columnResizable !== false && Boolean(props.onColumnWidthChange);
+
+    /** 측정값 + 사용자 리사이즈(`colWidthByKey`) — 드래그 중 즉시 반영. */
+    const effectiveColWidths = useMemo(() => {
+        const out = new Array<number>(colsLen);
+        for (let i = 0; i < colsLen; i++) {
+            const colKey = String(props.columns[i]?.key ?? i);
+            const overridden = props.colWidthByKey[colKey];
+            if (typeof overridden === "number" && overridden > 0) {
+                out[i] = Math.max(DEFAULT_DATA_COL_WIDTH_PX, Math.round(overridden));
+                continue;
+            }
+            const measured = measuredWidthByKey[colKey];
+            out[i] = typeof measured === "number" && measured > 0 ? measured : 0;
+        }
+        return out;
+    }, [colsLen, props.columns, props.colWidthByKey, measuredWidthByKey]);
+
     const colWidthsReady =
-        measuredColWidths.length === colsLen && measuredColWidths.every((w) => w > 0);
-    const totalGridWidth = colWidthsReady ? sumWidths(measuredColWidths) : 0;
+        effectiveColWidths.length === colsLen && effectiveColWidths.every((w) => w > 0);
+    const totalGridWidth = colWidthsReady ? sumWidths(effectiveColWidths) : 0;
 
     useLayoutEffect(() => {
         if (!colWidthsReady || !props.onLayoutColumnWidths) return;
-        props.onLayoutColumnWidths(measuredColWidths);
-    }, [colWidthsReady, measuredColWidths, props.onLayoutColumnWidths]);
+        props.onLayoutColumnWidths(effectiveColWidths);
+    }, [colWidthsReady, effectiveColWidths, props.onLayoutColumnWidths]);
 
     useLayoutEffect(() => {
         const table = headTableRef.current;
@@ -653,7 +706,7 @@ export default function JsGridTable(props: Props) {
                 >
                     {colWidthsReady ? (
                         <colgroup>
-                            {measuredColWidths.map((w, i) => (
+                            {effectiveColWidths.map((w, i) => (
                                 <col key={i} style={{ width: w }} />
                             ))}
                         </colgroup>
@@ -673,7 +726,7 @@ export default function JsGridTable(props: Props) {
                             const isDataCol = !isCheckbox && !isRowNum;
                             /** 사용자 width 없음 → 라벨+기본 레이아웃만 */
                             const intrinsicLabelCol = isDataCol && !savedWApplied;
-                            const headerLockedPx = colWidthsReady ? measuredColWidths[cdex] : undefined;
+                            const headerLockedPx = colWidthsReady ? effectiveColWidths[cdex] : undefined;
                             const headerLocked = lockedColumnStyle(headerLockedPx);
                             return (
                                 <th
@@ -866,7 +919,7 @@ export default function JsGridTable(props: Props) {
                                             )}
                                         </div>
                                     )}
-                                    {!isCheckbox && !isRowNum && props.onColumnWidthChange ? (
+                                    {columnResizable && isDataCol ? (
                                         <HeaderColumnResizeHandle
                                             minPx={DEFAULT_DATA_COL_WIDTH_PX}
                                             maxPx={COL_RESIZE_MAX_PX}
@@ -965,7 +1018,7 @@ export default function JsGridTable(props: Props) {
                                               : column.render
                                         : null;
 
-                                const lockedPx = colWidthsReady ? measuredColWidths[cdex] : undefined;
+                                const lockedPx = colWidthsReady ? effectiveColWidths[cdex] : undefined;
                                 const bodyLocked = lockedColumnStyle(lockedPx);
                                 const tdStyle: CSSProperties = {
                                     height: ROW_HEIGHT_PX,

@@ -1,4 +1,4 @@
-import type {CSSProperties, ReactNode} from "react";
+import type {CSSProperties, ReactNode, Ref} from "react";
 import type {JsGridToolbarApi} from "../js-grid/jsGridToolbarApi.ts";
 
 export type Content = Record<string, unknown>;
@@ -47,12 +47,17 @@ export type SheetHeaderSavePayload = {
 export type GridType = {
     data?: ExcelGridData
     /**
-     * 컬럼 저장 콜백. **전달된 경우에만** 툴바에 컬럼 필드(보이기·순서) 아이콘이 노출된다.
+     * `true`이면 컬럼 필드 메뉴에 **저장·초기화** 버튼을 표시한다(`react_grid` 헤더 저장 UI).
+     * 기본값 `false` — 보이기/순서 변경은 버튼 없이 즉시 반영된다.
+     */
+    enableHeaderSave?: boolean
+    /**
+     * 컬럼 저장 콜백. `enableHeaderSave` 와 함께 넘길 때 메뉴 **저장** 버튼이 동작한다.
      * - `Promise` 를 반환하면 저장 완료까지 메뉴에 로딩이 표시된다.
      * - 패키지는 API 를 호출하지 않으며, 사용처가 저장 후 `data` 를 갱신해 다시 내려준다.
      */
     onHeaderSave?: (payload: SheetHeaderSavePayload) => void | Promise<void>
-    /** 컬럼 설정 메뉴에서 "초기화" 클릭 시 호출된다. `Promise` 가능. */
+    /** `enableHeaderSave` 일 때 컬럼 메뉴 **초기화** 클릭 시 호출. `Promise` 가능. */
     onHeaderReset?: () => void | Promise<void>
     /**
      * `true`면 행 좌측에 체크박스 열이 표시되고, 선택 정보가 `JsGridRowSelectionContext` 로 노출된다.
@@ -84,18 +89,43 @@ export type GridType = {
      */
     onCellChange?: (event: SheetCellChangeEvent) => void | Promise<void>
     /**
+     * 편집·붙여넣기로 내부 `gridData` 가 바뀔 때마다 호출(전체 스냅샷).
+     * 부모 state 와 동기화할 때 사용한다.
+     */
+    onDataChange?: (data: ExcelGridData) => void
+    /**
      * @deprecated 붙여넣기는 `onCellChange` (`kind: 'paste'`) 로 전달한다.
      */
     onCellsPaste?: (batches: SheetCellPasteBatch[]) => void | Promise<void>
     /** `rowIds`·선택 식별용 행 id 필드 (기본 `id`, 없으면 `sourceRowIndex`) */
     rowIdKey?: string
+    /**
+     * `true`(기본)이면 데이터 열 헤더 경계를 드래그해 너비를 조절한다(`react_grid` resizable).
+     * `false`면 리사이즈 핸들을 숨긴다.
+     */
+    resizable?: boolean
     /** false면 전체화면(pseudo fullscreen) 토글 UI/동작을 비활성화한다. (기본값: true) */
     enablePseudoFullscreen?: boolean
+    /**
+     * `true`이면 마운트 시 전체화면(pseudo fullscreen)으로 시작한다.
+     * `enablePseudoFullscreen` 이 `false`이면 무시된다.
+     */
+    fullmode?: boolean
+    /**
+     * 전달 시 **전체화면 종료(축소) 버튼**이 내부 토글 대신 이 콜백을 호출한다.
+     * (예: 모달/라우트 닫기) — `fullmode` 와 함께 쓰는 경우가 많다.
+     */
+    onClose?: () => void
     /** 툴바 왼쪽(헤더 고정 안내 옆). 함수면 `runToolbarAction`으로 본문 로딩 연동 가능. */
     toolbarStart?: JsGridToolbarSlot
     /** 툴바 오른쪽 기본 아이콘 앞. 함수면 `runToolbarAction`으로 본문 로딩 연동 가능. */
     toolbarEnd?: JsGridToolbarSlot
     style?: CSSProperties
+    /**
+     * `getData()` 등 명령형 API.
+     * React 19 함수 컴포넌트 ref prop 패턴.
+     */
+    ref?: Ref<JsExcelGridHandle>
 }
 
 export type HeaderState = {
@@ -207,6 +237,15 @@ export type SheetErrorFocusTarget = {
 };
 
 /**
+ * `JsExcelGrid` 가 외부로 노출하는 명령형 API.
+ * 편집·붙여넣기가 반영된 현재 데이터는 `getData()` 로 꺼낸다.
+ */
+export type JsExcelGridHandle = {
+    /** 내부 `gridData` 전체(시트별 headers·data·errors). */
+    getData: () => ExcelGridData;
+};
+
+/**
  * `JsGridTable` 인스턴스가 외부로 노출하는 명령형 API.
  * `JsExcelGrid` 가 `SheetErrorBar` 등으로부터 셀 포커스 요청을 받아 이 핸들로 위임한다.
  */
@@ -256,6 +295,8 @@ export type Header = {
     targetClass?: string | null;
     /** 사용자/서버 저장 너비(px). 있으면 해당 컬럼에 적용, 없으면 자동 너비. */
     width?: number;
+    /** 필드 메뉴에서 숨긴 컬럼은 `false`. 생략·`true`면 표시. */
+    visible?: boolean;
     /**
      * 셀 커스텀 렌더링.
      * - 함수면 `(args) => ReactNode` 형태로 호출된다.

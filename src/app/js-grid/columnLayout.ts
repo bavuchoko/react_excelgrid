@@ -1,3 +1,17 @@
+/** 열 순서·구성 변경 감지(너비 맵 초기화용). */
+export function columnsWidthSignature(columns: readonly { key?: string | number }[]): string {
+    return columns.map((c, i) => String(c.key ?? i)).join("\0");
+}
+
+export function widthByKeyMapsNearlyEqual(
+    a: Record<string, number>,
+    b: Record<string, number>,
+): boolean {
+    const keys = Object.keys(a);
+    if (keys.length !== Object.keys(b).length) return false;
+    return keys.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 0.5);
+}
+
 /** `JsGridTable` 에서 잰 열 너비 배열 → `computeLeftOffsets` 용 맵. */
 export function columnWidthsToKeyMap(
     columns: readonly { key?: string | number }[],

@@ -12,6 +12,7 @@ export type {
     GridType,
     Header,
     HeaderState,
+    JsExcelGridHandle,
     JsGridTableHandle,
     JsGridToolbarSlot,
     Sheet,
@@ -54,6 +55,7 @@ export { MODIFIED_CELL_BG, areCellValuesEqual, isCellModifiedFromBaseline } from
 
 export {
     applyHeaderStateToHeader,
+    applyHeaderLayoutToHeaders,
     applyHeaderStateToExcelGridData,
 } from "./utils/applyHeaderState.ts";
 export {
