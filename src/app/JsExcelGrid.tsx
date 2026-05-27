@@ -1,30 +1,90 @@
-import type {DataType, GridType, Header, HeaderState, JsGridTableColumn, Sheet} from "./type/Type.ts";
+import type {
+    Content,
+    DataType,
+    ExcelGridData,
+    GridCellEditEvent,
+    GridCellPasteBatch,
+    GridType,
+    Header,
+    HeaderState,
+    JsGridTableColumn,
+    JsGridTableHandle,
+    JsGridToolbarSlot,
+    Sheet,
+    SheetCellChangeEvent,
+    SheetCellPasteBatch,
+    SheetErrorFocusTarget,
+} from "./type/Type.ts";
 import {useCallback, useEffect, useId, useMemo, useRef, useState} from "react";
+import { JsGridToolbarProvider } from "./js-grid/JsGridToolbarContext.tsx";
+import {
+    JsGridRowSelectionProvider,
+    type JsGridRowSelectionApi,
+} from "./js-grid/JsGridRowSelectionContext.tsx";
 import ColumnFieldsMenu from "./js-grid/ColumnFieldsMenu.tsx";
 import {toHeaderState, type UserColumn} from "./js-grid/columnFieldsMenuModel.ts";
-import {computeLeftOffsets, getColumnFreezeStickyStyle} from "./js-grid/columnLayout.ts";
+import {
+    columnWidthsToKeyMap,
+    computeLeftOffsets,
+    getColumnFreezeStickyStyle,
+} from "./js-grid/columnLayout.ts";
 import {GRID_BORDER} from "./js-grid/gridStyles.ts";
 import JsGridTable from "./js-grid/JsGridTable.tsx";
 import JsGridToolbar from "./js-grid/JsGridToolbar.tsx";
-import { DEFAULT_EXCEL_UPLOAD_ACCEPT } from "./js-grid/excelUploadConstraints.ts";
-import UploadFilePanel from "./js-grid/UploadFilePanel.tsx";
 import {useColumnWidths} from "./js-grid/useColumnWidths.ts";
 import {useFreezeColumns} from "./js-grid/useFreezeColumns.ts";
 import SheetTabs from "./js-grid/SheetTabs.tsx";
+import SheetErrorBar from "./js-grid/SheetErrorBar.tsx";
+import { isCellModifiedFromBaseline } from "./js-grid/cellModified.ts";
+import { buildSheetCellErrorLookup } from "./js-grid/sheetErrors.ts";
+import { filterChangedPasteBatches, resolveChangeRowId } from "./js-grid/gridCellSelection.ts";
+import { areCellValuesEqual } from "./js-grid/cellModified.ts";
 import { sortRowsByHeader } from "./js-grid/sortSheetContent.ts";
+import { applySheetCellEdit, applySheetCellsPaste } from "./utils/applySheetCellEdits.ts";
+
+/**
+ * 화면·필드 메뉴 모두에서 항상 숨기는 헤더 키 목록.
+ * 데이터에는 남아 있어 행 식별(선택·삭제·`rowIdKey`)용으로 그대로 쓸 수 있다.
+ */
+const ALWAYS_HIDDEN_HEADER_KEYS: ReadonlySet<string> = new Set(["id"]);
+
+function isHiddenHeaderKey(key: string): boolean {
+    return ALWAYS_HIDDEN_HEADER_KEYS.has(key);
+}
+
+function headerSaveErrorMessage(err: unknown): string {
+    if (err instanceof Error && err.message.trim()) return err.message;
+    const o = typeof err === "object" && err !== null ? (err as Record<string, unknown>) : null;
+    if (o && "response" in o && typeof o.response === "object" && o.response !== null) {
+        const rd = (o.response as Record<string, unknown>).data;
+        if (typeof rd === "string" && rd.trim()) return rd;
+        if (rd && typeof rd === "object") {
+            const m = (rd as Record<string, unknown>).message;
+            if (typeof m === "string" && m.trim()) return m;
+        }
+    }
+    return "컬럼 저장에 실패했습니다.";
+}
 
 export default function JsExcelGrid(props: GridType) {
+    const [gridData, setGridData] = useState<ExcelGridData>(() => props.data ?? {});
+    const baselineBySheetRef = useRef<Record<string, Content[]>>({});
+
+    useEffect(() => {
+        setGridData(props.data ?? {});
+        baselineBySheetRef.current = {};
+    }, [props.data]);
+
     // 외부 입력은 `Record<sheetName, SheetBody>` 모양이므로, 내부 사용을 위해 배열(`Sheet[]`)로 정규화한다.
-    // 객체 키 삽입 순서가 곧 시트 순서이며, 시트 이름이 그대로 식별자(`name`)가 된다.
     const sheets: Sheet[] = useMemo(() => {
-        const map = props.data ?? {};
+        const map = gridData;
         return Object.entries(map).map(([name, body]) => ({
             name,
             headers: body?.headers ?? [],
             data: body?.data ?? [],
             errors: body?.errors,
         }));
-    }, [props.data]);
+    }, [gridData]);
 
     const [activeSheetName, setActiveSheetName] = useState<string | null>(null);
     const [sheetColumnState, setSheetColumnState] = useState<Record<string, {
@@ -32,7 +92,6 @@ export default function JsExcelGrid(props: GridType) {
         colWidths: Record<string, number>;
     }>>({});
 
-    // sheets 변경 시 기본 active sheet를 첫번째로 보정
     useEffect(() => {
         if (sheets.length === 0) {
             if (activeSheetName !== null) setActiveSheetName(null);
@@ -70,9 +129,69 @@ export default function JsExcelGrid(props: GridType) {
         [data, sortKey, sortDir, headerTypeByKey],
     );
 
+    /** 오류 행 인덱스는 정렬 전 `data` 기준 — 표시 행마다 원본 인덱스를 매핑한다. */
+    const sourceRowIndexes = useMemo(
+        () => sortedData.map((row) => data.indexOf(row as Content)),
+        [sortedData, data],
+    );
+
+    const cellErrorLookup = useMemo(
+        () => buildSheetCellErrorLookup(activeSheet?.errors),
+        [activeSheet?.errors],
+    );
+
+    /** 시트별 최초 진입 시 `gridData` 스냅샷 — 편집·붙여넣기와 비교해 수정 셀을 표시. */
+    const baselineData = useMemo(() => {
+        if (!activeName) return undefined;
+        const rows = gridData[activeName]?.data;
+        if (!rows) return undefined;
+        if (!baselineBySheetRef.current[activeName]) {
+            baselineBySheetRef.current[activeName] = structuredClone(rows);
+        }
+        return baselineBySheetRef.current[activeName];
+    }, [activeName, gridData]);
+
+    const dirtyCellsRef = useRef<Set<string>>(new Set());
+    const [dirtyRevision, setDirtyRevision] = useState(0);
+
+    const dirtyCellKey = useCallback(
+        (sourceRowIndex: number, columnKey: string) =>
+            `${activeName ?? ""}\u0000${sourceRowIndex}\u0000${columnKey}`,
+        [activeName],
+    );
+
+    const markCellDirty = useCallback(
+        (sourceRowIndex: number, columnKey: string) => {
+            if (!activeName || sourceRowIndex < 0) return;
+            const key = dirtyCellKey(sourceRowIndex, columnKey);
+            if (dirtyCellsRef.current.has(key)) return;
+            dirtyCellsRef.current.add(key);
+            setDirtyRevision((v) => v + 1);
+        },
+        [activeName, dirtyCellKey],
+    );
+
+    const isCellModified = useCallback(
+        (sourceRowIndex: number, columnKey: string, currentRow: Content) => {
+            void dirtyRevision;
+            if (!activeName || sourceRowIndex < 0) return false;
+            if (dirtyCellsRef.current.has(dirtyCellKey(sourceRowIndex, columnKey))) {
+                return true;
+            }
+            return isCellModifiedFromBaseline(
+                baselineData,
+                sourceRowIndex,
+                columnKey,
+                currentRow,
+            );
+        },
+        [activeName, baselineData, dirtyCellKey, dirtyRevision],
+    );
+
     const enablePseudoFullscreen = props.enablePseudoFullscreen !== false;
     const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
     const rootRef = useRef<HTMLDivElement | null>(null);
+    const gridOverlaySpinClass = useId().replace(/:/g, "");
 
     const [userColumns, setUserColumns] = useState<UserColumn[]>([]);
 
@@ -80,14 +199,13 @@ export default function JsExcelGrid(props: GridType) {
         () => headerList.map((h) => h.key).join('\u0001'),
         [headerList],
     );
-    // 시트/헤더가 바뀌면, 해당 시트의 저장된 컬럼 설정이 있으면 복원하고 없으면 기본값(모두 visible)로 만든다.
     useEffect(() => {
         if (!activeName) return;
+        const candidates = headerList.filter((h) => !isHiddenHeaderKey(h.key));
         const saved = sheetColumnState[activeName];
         if (saved?.userColumns?.length) {
-            // 현재 headerList에 존재하는 key만 유지 + 신규 key는 visible true로 추가
             const savedByKey = new Map(saved.userColumns.map((c) => [c.key, c] as const));
-            const next: UserColumn[] = headerList.map((h) => {
+            const next: UserColumn[] = candidates.map((h) => {
                 const k = h.key;
                 const s = savedByKey.get(k);
                 return {
@@ -99,7 +217,7 @@ export default function JsExcelGrid(props: GridType) {
             setUserColumns(next);
         } else {
             setUserColumns(
-                headerList.map((h) => ({
+                candidates.map((h) => ({
                     key: h.key,
                     label: String(h.name ?? h.key),
                     visible: true,
@@ -127,7 +245,7 @@ export default function JsExcelGrid(props: GridType) {
         };
     }, [enablePseudoFullscreen, isPseudoFullscreen]);
 
-    const showDelete = Boolean(props.onDeleteClick);
+    const showRowSelection = props.enableRowSelection === true;
 
     const headerWidthSig = useMemo(
         () => headerList.map((h) => `${h.key}:${h.width ?? ""}`).join("\u0001"),
@@ -148,48 +266,43 @@ export default function JsExcelGrid(props: GridType) {
     const columns = useMemo((): readonly JsGridTableColumn[] => {
         const list = headerList;
         const headerByKey = new Map(list.map((h) => [h.key, h] as const));
-        const visible = userColumns
+        const visible: JsGridTableColumn[] = userColumns
             .filter((c) => c.visible)
             .map((c) => {
                 const h = headerByKey.get(c.key);
-                return { key: c.key, label: c.label, render: h?.render };
+                return {
+                    key: c.key,
+                    label: c.label,
+                    type: h?.type ?? null,
+                    render: h?.render,
+                    editor: h?.editor,
+                };
             });
-        const rowNum = { key: "__rownum__", label: "#", __rownum__: true as const };
-        const cb = { key: "__checkbox__", label: "", __checkbox__: true as const };
-        return showDelete ? [cb, rowNum, ...visible] : [rowNum, ...visible];
-    }, [userColumns, showDelete, headerList]);
+        const rowNum: JsGridTableColumn = { key: "__rownum__", label: "#", __rownum__: true };
+        const cb: JsGridTableColumn = { key: "__checkbox__", label: "", __checkbox__: true };
+        return showRowSelection ? [cb, rowNum, ...visible] : [rowNum, ...visible];
+    }, [userColumns, showRowSelection, headerList]);
 
     const [isFieldsMenuOpen, setIsFieldsMenuOpen] = useState(false);
+    const [fieldsSaveBusy, setFieldsSaveBusy] = useState(false);
+    const [fieldsResetBusy, setFieldsResetBusy] = useState(false);
+    const [fieldsSaveError, setFieldsSaveError] = useState<string | null>(null);
+    const fieldsActionBusy = fieldsSaveBusy || fieldsResetBusy;
+    const fieldsActionBusyRef = useRef(false);
+    fieldsActionBusyRef.current = fieldsActionBusy;
+
+    useEffect(() => {
+        if (isFieldsMenuOpen) setFieldsSaveError(null);
+    }, [isFieldsMenuOpen]);
+
     const [fieldsMenuPos, setFieldsMenuPos] = useState<{ top: number; right: number } | null>(null);
     const fieldsBtnRef = useRef<HTMLDivElement | null>(null);
-    const uploadBtnRef = useRef<HTMLDivElement | null>(null);
     const dragKeyRef = useRef<string | null>(null);
-
-    const [isUploadPanelOpen, setIsUploadPanelOpen] = useState(false);
-    const [uploadPanelPos, setUploadPanelPos] = useState<{ top: number; right: number } | null>(null);
-    const [uploadPanelBusy, setUploadPanelBusy] = useState(false);
-    const [deleteBusy, setDeleteBusy] = useState(false);
-    const deleteSpinClass = useId().replace(/:/g, "");
-
-    const toggleUploadPanel = useCallback((e: { stopPropagation: () => void }) => {
-        e.stopPropagation();
-        if (uploadPanelBusy || deleteBusy) return;
-        setIsFieldsMenuOpen(false);
-        const rect = uploadBtnRef.current?.getBoundingClientRect();
-        if (rect) {
-            setUploadPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
-        }
-        setIsUploadPanelOpen((v) => !v);
-    }, [uploadPanelBusy, deleteBusy]);
-
-    const handleUploadConfirm = useCallback(
-        (files: File[]) => Promise.resolve(props.onUploadFiles?.(files)),
-        [props.onUploadFiles],
-    );
 
     useEffect(() => {
         if (!isFieldsMenuOpen) return;
         const onDown = (e: MouseEvent) => {
+            if (fieldsActionBusyRef.current) return;
             const target = e.target as Node | null;
             if (!target) return;
             if (fieldsBtnRef.current?.contains(target)) return;
@@ -198,7 +311,10 @@ export default function JsExcelGrid(props: GridType) {
             setIsFieldsMenuOpen(false);
         };
         const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setIsFieldsMenuOpen(false);
+            if (e.key === 'Escape') {
+                if (fieldsActionBusyRef.current) return;
+                setIsFieldsMenuOpen(false);
+            }
         };
         window.addEventListener('mousedown', onDown);
         window.addEventListener('keydown', onKey);
@@ -208,43 +324,28 @@ export default function JsExcelGrid(props: GridType) {
         };
     }, [isFieldsMenuOpen]);
 
-    useEffect(() => {
-        if (!isUploadPanelOpen) return;
-        const onDown = (e: MouseEvent) => {
-            if (uploadPanelBusy) return;
-
-            const target = e.target as Node | null;
-            if (!target) return;
-
-            if (uploadBtnRef.current?.contains(target)) return;
-            const panelEl = document.querySelector('[data-jsgrid-upload-panel="1"]');
-            if (panelEl && panelEl.contains(target)) return;
-            setIsUploadPanelOpen(false);
-        };
-
-        const onKey = (e: KeyboardEvent) => {
-            if (uploadPanelBusy) return;
-            if (e.key === "Escape") setIsUploadPanelOpen(false);
-        };
-
-        window.addEventListener("mousedown", onDown);
-        window.addEventListener("keydown", onKey);
-
-        return () => {
-            window.removeEventListener("mousedown", onDown);
-            window.removeEventListener("keydown", onKey);
-        };
-
-    }, [isUploadPanelOpen, uploadPanelBusy]);
-
     const { freezeUntilIndex, setFreezeUntilIndex } = useFreezeColumns(columns.length);
-    const { headerCellRefs, colWidthByKey, measuredWidthByKey, setColumnWidth } = useColumnWidths(
+    const { headerCellRefs, colWidthByKey, setColumnWidth } = useColumnWidths(
         columns,
         persistedColWidths,
         headerWidthSig,
     );
 
-    const leftOffsets = useMemo(() => computeLeftOffsets(columns, measuredWidthByKey), [columns, measuredWidthByKey]);
+    const [layoutColumnWidths, setLayoutColumnWidths] = useState<readonly number[]>([]);
+    const layoutWidthByKey = useMemo(
+        () => columnWidthsToKeyMap(columns, layoutColumnWidths),
+        [columns, layoutColumnWidths],
+    );
+    const leftOffsets = useMemo(
+        () => computeLeftOffsets(columns, layoutWidthByKey),
+        [columns, layoutWidthByKey],
+    );
+
+    const onLayoutColumnWidths = useCallback((widths: readonly number[]) => {
+        setLayoutColumnWidths((prev) =>
+            prev.length === widths.length && prev.every((w, i) => w === widths[i]) ? prev : widths,
+        );
+    }, []);
 
     const getStickyStyle = useCallback((args: { colIndex: number; isHeader: boolean }) => {
         return getColumnFreezeStickyStyle({
@@ -257,7 +358,7 @@ export default function JsExcelGrid(props: GridType) {
 
     const [selectedRowIndexes, setSelectedRowIndexes] = useState<Set<number>>(() => new Set());
     const [selectionAnchor, setSelectionAnchor] = useState(() => ({
-        show: Boolean(props.onDeleteClick),
+        show: showRowSelection,
     }));
 
     /** 행 수가 줄거나 늘면(삭제·업로드 등) 인덱스 기준 선택은 다음 행에 밀려 잘못 유지되므로 비운다. */
@@ -271,10 +372,7 @@ export default function JsExcelGrid(props: GridType) {
         }
     }, [sortedData.length]);
 
-    const pageRowIds = useMemo(() => {
-        // 선택은 `row.id`가 없어도 동작해야 하므로, 현재 페이지의 행 인덱스를 키로 사용한다.
-        return sortedData.map((_, idx) => idx);
-    }, [sortedData]);
+    const pageRowIds = useMemo(() => sortedData.map((_, idx) => idx), [sortedData]);
 
     const headerChecked =
         pageRowIds.length > 0 && pageRowIds.every((id) => selectedRowIndexes.has(id));
@@ -301,12 +399,16 @@ export default function JsExcelGrid(props: GridType) {
         });
     }, []);
 
-    if (selectionAnchor.show !== showDelete) {
-        setSelectionAnchor({ show: showDelete });
+    const clearSelection = useCallback(() => {
+        setSelectedRowIndexes(new Set());
+    }, []);
+
+    if (selectionAnchor.show !== showRowSelection) {
+        setSelectionAnchor({ show: showRowSelection });
         setSelectedRowIndexes(new Set());
     }
 
-    // 시트 전환 시 정렬/선택을 초기화 (기본 요구사항: content 전환)
+    // 시트 전환 시 정렬/선택을 초기화
     const prevSheetIndexRef = useRef<number | null>(null);
     if (prevSheetIndexRef.current !== safeActiveIndex) {
         prevSheetIndexRef.current = safeActiveIndex;
@@ -315,8 +417,28 @@ export default function JsExcelGrid(props: GridType) {
         setSortDir('ASC');
     }
 
+    const selectedRows = useMemo(() => {
+        const rows: unknown[] = [];
+        const indexes = Array.from(selectedRowIndexes).sort((a, b) => a - b);
+        for (const idx of indexes) {
+            const row = sortedData[idx];
+            if (row !== undefined) rows.push(row);
+        }
+        return rows;
+    }, [selectedRowIndexes, sortedData]);
+
+    const rowSelectionApi = useMemo((): JsGridRowSelectionApi | null => {
+        if (!showRowSelection) return null;
+        return {
+            selectedCount: selectedRows.length,
+            selectedRows,
+            disabled: selectedRows.length === 0,
+            clearSelection,
+        };
+    }, [showRowSelection, selectedRows, clearSelection]);
+
     const rowSelection = useMemo(() => {
-        if (!showDelete || deleteBusy) return undefined;
+        if (!showRowSelection) return undefined;
         return {
             pageRowIds,
             selectedIds: selectedRowIndexes,
@@ -324,286 +446,454 @@ export default function JsExcelGrid(props: GridType) {
             onToggleAll: toggleSelectAll,
             onToggleRow: toggleSelectRow,
         };
-    }, [showDelete, deleteBusy, pageRowIds, selectedRowIndexes, headerChecked, toggleSelectAll, toggleSelectRow]);
+    }, [showRowSelection, pageRowIds, selectedRowIndexes, headerChecked, toggleSelectAll, toggleSelectRow]);
 
-    const handleDeleteClick = useCallback(async () => {
-        if (!props.onDeleteClick || deleteBusy) return;
-        const selectedRows = Array.from(selectedRowIndexes)
-            .sort((a, b) => a - b)
-            .map((i) => sortedData[i])
-            .filter((v) => v !== undefined);
-        if (selectedRows.length === 0) return;
-        setDeleteBusy(true);
-        setIsFieldsMenuOpen(false);
-        setIsUploadPanelOpen(false);
-        try {
-            await Promise.resolve(props.onDeleteClick(selectedRows));
-        } finally {
-            setDeleteBusy(false);
-        }
-    }, [props.onDeleteClick, deleteBusy, selectedRowIndexes, sortedData]);
+    const fieldsBusyLabel = fieldsSaveBusy ? "저장 중..." : fieldsResetBusy ? "초기화 중..." : undefined;
+
+    const [toolbarOverlay, setToolbarOverlay] = useState<{ label: string; accent: string } | null>(null);
+
+    const runToolbarAction = useCallback(
+        async (
+            label: string,
+            action: () => void | Promise<void>,
+            accent = "#2563eb",
+        ) => {
+            setToolbarOverlay({ label, accent });
+            await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => resolve());
+            });
+            try {
+                await Promise.resolve(action());
+            } finally {
+                setToolbarOverlay(null);
+            }
+        },
+        [],
+    );
+
+    const setBodyOverlay = useCallback(
+        (overlay: { label: string; accent?: string } | null) => {
+            setToolbarOverlay(
+                overlay ? { label: overlay.label, accent: overlay.accent ?? "#2563eb" } : null,
+            );
+        },
+        [],
+    );
+
+    const toolbarApi = useMemo(
+        () => ({ runToolbarAction, setBodyOverlay }),
+        [runToolbarAction, setBodyOverlay],
+    );
+
+    const renderToolbarSlot = useCallback(
+        (slot?: JsGridToolbarSlot) => {
+            if (slot == null) return undefined;
+            return typeof slot === "function" ? slot(toolbarApi) : slot;
+        },
+        [toolbarApi],
+    );
+
+    const rowIdKey = props.rowIdKey ?? "id";
+
+    const tableCellChange = useCallback(
+        (event: GridCellEditEvent) => {
+            if (!activeName) return;
+            if (areCellValuesEqual(event.previousValue, event.value)) return;
+            if (event.sourceRowIndex >= 0) {
+                markCellDirty(event.sourceRowIndex, event.columnKey);
+            }
+            const rowId = resolveChangeRowId(event.row, event.sourceRowIndex, rowIdKey);
+            const rowIds = rowId != null ? [rowId] : [];
+            setGridData((prev) => applySheetCellEdit(prev, activeName, event));
+            if (rowIds.length === 0) return;
+            const sheetEvent: SheetCellChangeEvent = {
+                kind: "edit",
+                sheetName: activeName,
+                columnKey: event.columnKey,
+                value: event.value,
+                rowIds,
+                previousValue: event.previousValue,
+            };
+            void Promise.resolve(props.onCellChange?.(sheetEvent));
+        },
+        [props.onCellChange, activeName, markCellDirty, rowIdKey],
+    );
+
+    const tableCellsPaste = useCallback(
+        (batches: GridCellPasteBatch[]) => {
+            if (!activeName) return;
+            const changedBatches = filterChangedPasteBatches(batches);
+            if (changedBatches.length === 0) return;
+            for (const batch of changedBatches) {
+                for (const it of batch.items) {
+                    if (it.sourceRowIndex >= 0) {
+                        markCellDirty(it.sourceRowIndex, it.columnKey);
+                    }
+                }
+            }
+            const sheetBatches: SheetCellPasteBatch[] = changedBatches.map((b) => ({
+                ...b,
+                sheetName: activeName,
+                items: b.items.map((it) => ({ ...it, sheetName: activeName })),
+            }));
+            setGridData((prev) => applySheetCellsPaste(prev, sheetBatches));
+            for (const batch of sheetBatches) {
+                if (batch.rowIds.length === 0) continue;
+                const pasteEvent: SheetCellChangeEvent = {
+                    kind: "paste",
+                    sheetName: activeName,
+                    columnKey: batch.columnKey,
+                    value: batch.value,
+                    rowIds: batch.rowIds,
+                };
+                void Promise.resolve(props.onCellChange?.(pasteEvent));
+            }
+            void Promise.resolve(props.onCellsPaste?.(sheetBatches));
+        },
+        [props.onCellChange, props.onCellsPaste, activeName, markCellDirty],
+    );
+
+    /** 시트 에러 바에서 셀로 점프하기 위한 명령형 ref. */
+    const tableRef = useRef<JsGridTableHandle | null>(null);
+
+    /**
+     * `SheetErrorBar` 가 보내는 `{columnName, rowIndex}` 를 그리드 좌표로 변환한다.
+     *
+     * - 컬럼: `headerList` 에서 `name` 으로 찾은 뒤 `key` 를 그리드에 전달.
+     *   숨김 처리되어 보이는 컬럼이 아닐 수도 있는데, 그때는 행만 스크롤한다.
+     * - 행: 서버 응답이 가리키는 인덱스는 원본 `data` 기준. 사용자가 정렬을 걸어
+     *   `sortedData` 순서가 바뀌었으면 원본 행을 가리키도록 인덱스를 재계산한다.
+     */
+    const handleSheetErrorFocus = useCallback(
+        (target: SheetErrorFocusTarget) => {
+            if (!Number.isFinite(target.rowIndex) || target.rowIndex < 0) return;
+            const sourceRow = data[target.rowIndex];
+            if (sourceRow === undefined) return;
+            const displayRowIndex = sortedData.indexOf(sourceRow);
+            if (displayRowIndex < 0) return;
+            const header = headerList.find((h) => h.name === target.columnName);
+            tableRef.current?.focusCell({
+                rowIndex: displayRowIndex,
+                columnKey: header?.key,
+            });
+        },
+        [data, sortedData, headerList],
+    );
+
+    const toolbarStartNode = useMemo(
+        () => renderToolbarSlot(props.toolbarStart),
+        [props.toolbarStart, renderToolbarSlot],
+    );
+    const toolbarEndNode = useMemo(
+        () => renderToolbarSlot(props.toolbarEnd),
+        [props.toolbarEnd, renderToolbarSlot],
+    );
+
+    const gridBodyOverlay = useMemo(() => {
+        if (toolbarOverlay) return toolbarOverlay;
+        if (fieldsSaveBusy) return { label: "저장 중...", accent: "#2563eb" };
+        if (fieldsResetBusy) return { label: "초기화 중...", accent: "#2563eb" };
+        return null;
+    }, [toolbarOverlay, fieldsSaveBusy, fieldsResetBusy]);
+    const gridBodyBusy = gridBodyOverlay != null;
 
     return (
-            <div
-                ref={rootRef}
-                style={{
-                    border: `1px solid ${GRID_BORDER}`,
-                    width: '100%',
-                    // 부모가 고정 height를 가질 때는 maxHeight:100%로 "부모 안"에 맞추고,
-                    // 내부 테이블 영역(JsGridTable wrapper)이 flex:1 + overflow:auto로 스크롤을 담당한다.
-                    // flex 레이아웃(부모가 display:flex)에서도 부모 높이를 따라가도록 한다.
-                    flex: '1 1 auto',
-                    alignSelf: 'stretch',
-                    maxHeight: '100%',
-                    overflow: 'hidden',
-                    backgroundColor: '#ffffff',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    boxSizing: 'border-box',
-                    minHeight: 0,
-                    ...(props.style ?? {}),
-                    ...(isPseudoFullscreen
-                        ? {
-                            width: '100vw',
-                            height: '100vh',
-                            maxHeight: undefined,
-                            position: 'fixed' as const,
-                            inset: 0,
-                            zIndex: 9999,
-                            boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
-                        }
-                        : null),
-                }}
-            >
-                <JsGridToolbar
-                    fieldsBtnRef={fieldsBtnRef}
-                    isPseudoFullscreen={isPseudoFullscreen}
-                    enablePseudoFullscreen={enablePseudoFullscreen}
-                    onDownLoadClick={props.onDownloadClick}
-                    uploadBtnRef={props.onUploadFiles ? uploadBtnRef : undefined}
-                    onToggleUploadPanel={props.onUploadFiles ? toggleUploadPanel : undefined}
-                    uploadBusy={props.onUploadFiles ? uploadPanelBusy : undefined}
-                    deleteBusy={props.onDeleteClick ? deleteBusy : undefined}
-                    onTrashClick={props.onDeleteClick ? handleDeleteClick : undefined}
-                    trashDisabled={selectedRowIndexes.size === 0 || deleteBusy}
-                    onToggleFieldsMenu={(e) => {
-                        e.stopPropagation();
-                        if (uploadPanelBusy || deleteBusy) return;
-                        setIsUploadPanelOpen(false);
-                        const rect = fieldsBtnRef.current?.getBoundingClientRect();
-                        if (rect) {
-                            setFieldsMenuPos({
-                                top: rect.bottom + 8,
-                                right: window.innerWidth - rect.right,
-                            });
-                        }
-                        setIsFieldsMenuOpen(v => !v);
-                    }}
-                    onTogglePseudoFullscreen={() => setIsPseudoFullscreen(v => !v)}
-                />
-
-                {props.onUploadFiles ? (
-                    <UploadFilePanel
-                        open={isUploadPanelOpen}
-                        pos={uploadPanelPos}
-                        accept={props.uploadAccept ?? DEFAULT_EXCEL_UPLOAD_ACCEPT}
-                        multiple={props.uploadMultiple ?? false}
-                        onBusyChange={setUploadPanelBusy}
-                        onUploadConfirm={handleUploadConfirm}
-                        onClose={() => setIsUploadPanelOpen(false)}
-                    />
-                ) : null}
-
+        <JsGridToolbarProvider value={toolbarApi}>
+            <JsGridRowSelectionProvider value={rowSelectionApi}>
                 <div
+                    ref={rootRef}
                     style={{
-                        flex: 1,
+                        border: `1px solid ${GRID_BORDER}`,
+                        width: '100%',
+                        flex: '1 1 auto',
+                        alignSelf: 'stretch',
+                        maxHeight: '100%',
+                        overflow: 'hidden',
+                        backgroundColor: '#ffffff',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        position: 'relative',
+                        boxSizing: 'border-box',
                         minHeight: 0,
-                        display: "flex",
-                        flexDirection: "column",
-                        position: "relative",
+                        ...(props.style ?? {}),
+                        ...(isPseudoFullscreen
+                            ? {
+                                width: '100vw',
+                                height: '100vh',
+                                maxHeight: undefined,
+                                position: 'fixed' as const,
+                                inset: 0,
+                                zIndex: 9999,
+                                boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
+                            }
+                            : null),
                     }}
                 >
-                <SheetTabs
-                    sheets={sheets}
-                    activeIndex={safeActiveIndex}
-                    onChange={(idx) => {
-                        if (uploadPanelBusy || deleteBusy) return;
-                        const nextSheet = sheets[idx];
-                        if (!nextSheet) return;
-                        setIsUploadPanelOpen(false);
-
-                        // 시트 전환 전에 현재 시트의 "진행중 설정"을 저장
-                        if (activeName) {
-                            setSheetColumnState((prev) => ({
-                                ...prev,
-                                [activeName]: {
-                                    userColumns,
-                                    colWidths: colWidthByKey,
-                                },
-                            }));
+                    <style>{`
+                        @keyframes jsgrid-body-overlay-spin-${gridOverlaySpinClass} {
+                            to { transform: rotate(360deg); }
                         }
-                        setActiveSheetName(nextSheet.name);
-                    }}
-                />
-
-                <ColumnFieldsMenu
-                    open={isFieldsMenuOpen}
-                    pos={fieldsMenuPos}
-                    userColumns={userColumns}
-                    dragKeyRef={dragKeyRef}
-                    onReorder={(fromKey, toKey) => {
-                        setUserColumns((prev) => {
-                            const fromIdx = prev.findIndex(x => x.key === fromKey);
-                            const toIdx = prev.findIndex(x => x.key === toKey);
-                            if (fromIdx < 0 || toIdx < 0) return prev;
-                            const next = [...prev];
-                            const [moved] = next.splice(fromIdx, 1);
-                            next.splice(toIdx, 0, moved);
-                            return next;
-                        });
-                    }}
-                    onToggleVisible={(key, visible) => {
-                        setUserColumns((prev) => prev.map(x => x.key === key ? { ...x, visible } : x));
-                    }}
-                    onReset={() => {
-                        // 현재 시트 설정만 초기화
-                        if (activeName) {
-                            setSheetColumnState((prev) => {
-                                const next = { ...prev };
-                                delete next[activeName];
-                                return next;
-                            });
+                        .jsgrid-body-overlay-spin-dot-${gridOverlaySpinClass} {
+                            animation: jsgrid-body-overlay-spin-${gridOverlaySpinClass} 0.75s linear infinite;
                         }
-                        setUserColumns(
-                            headerList.map((c) => ({
-                                key: c.key,
-                                label: String(c.name ?? c.key),
-                                visible: true,
-                            })),
-                        );
-                        props.onHeaderReset?.();
-                    }}
-                    onSave={() => {
-                        const payload: HeaderState[] = toHeaderState(userColumns, colWidthByKey);
-                        if (activeName) {
-                            setSheetColumnState((prev) => ({
-                                ...prev,
-                                [activeName]: {
-                                    userColumns,
-                                    colWidths: colWidthByKey,
-                                },
-                            }));
-                            // 패키지는 API를 호출하지 않는다. 사용처가 저장 후 data를 갱신해 내려주면 된다.
-                            Promise
-                                .resolve(props.onHeaderSave?.({
-                                    sheetName: activeName,
-                                    headers: payload,
-                                }))
-                                .catch(() => {
-                                    // 사용처에서 실패 처리(UI)를 할 수 있게 여기선 무시
+                    `}</style>
+                    <JsGridToolbar
+                        fieldsBtnRef={fieldsBtnRef}
+                        showColumnFieldsMenu={Boolean(props.onHeaderSave)}
+                        isPseudoFullscreen={isPseudoFullscreen}
+                        enablePseudoFullscreen={enablePseudoFullscreen}
+                        fieldsBusy={props.onHeaderSave ? fieldsActionBusy : undefined}
+                        fieldsBusyLabel={fieldsBusyLabel}
+                        onToggleFieldsMenu={(e) => {
+                            e.stopPropagation();
+                            if (!props.onHeaderSave) return;
+                            if (fieldsActionBusy) return;
+                            const rect = fieldsBtnRef.current?.getBoundingClientRect();
+                            if (rect) {
+                                setFieldsMenuPos({
+                                    top: rect.bottom + 8,
+                                    right: window.innerWidth - rect.right,
                                 });
-                        }
-                        setIsFieldsMenuOpen(false);
-                    }}
-                />
+                            }
+                            setIsFieldsMenuOpen(v => !v);
+                        }}
+                        onTogglePseudoFullscreen={() => setIsPseudoFullscreen(v => !v)}
+                        toolbarStart={toolbarStartNode}
+                        toolbarEnd={toolbarEndNode}
+                    />
 
-                {sheets.length === 0 ? (
                     <div
-                        role="status"
-                        aria-live="polite"
                         style={{
                             flex: 1,
                             minHeight: 0,
                             display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#64748b",
-                            fontSize: 13,
-                            backgroundColor: "#ffffff",
+                            flexDirection: "column",
+                            position: "relative",
                         }}
                     >
-                        데이터가 없습니다.
-                    </div>
-                ) : (
-                    <JsGridTable
-                        columns={columns}
-                        data={sortedData}
-                        sortKey={sortKey}
-                        sortDir={sortDir}
-                        headerCellRefs={headerCellRefs}
-                        colWidthByKey={colWidthByKey}
-                        onColumnWidthChange={setColumnWidth}
-                        setFreezeUntilIndex={setFreezeUntilIndex}
-                        getStickyStyle={getStickyStyle}
-                        rowSelection={rowSelection}
-                        onRowClick={props.onRowClick}
-                        onSortChange={(next) => {
-                            setSortKey(next.key);
-                            setSortDir(next.direction);
-                        }}
-                    />
-                )}
+                        <SheetTabs
+                            sheets={sheets}
+                            activeIndex={safeActiveIndex}
+                            onChange={(idx) => {
+                                if (fieldsActionBusy) return;
+                                const nextSheet = sheets[idx];
+                                if (!nextSheet) return;
 
-                {deleteBusy ? (
-                    <div
-                        role="status"
-                        aria-live="polite"
-                        aria-busy
-                        aria-label="삭제 중"
-                        style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            background: "rgba(255,255,255,0.35)",
-                            // 데이터 영역에 블러 효과(배경/하위 요소를 블러 처리)
-                            backdropFilter: "blur(6px)",
-                            WebkitBackdropFilter: "blur(6px)",
-                            zIndex: 3,
-                            pointerEvents: "none",
-                        }}
-                    >
+                                if (activeName) {
+                                    setSheetColumnState((prev) => ({
+                                        ...prev,
+                                        [activeName]: {
+                                            userColumns,
+                                            colWidths: colWidthByKey,
+                                        },
+                                    }));
+                                }
+                                setActiveSheetName(nextSheet.name);
+                            }}
+                        />
+
+                        <ColumnFieldsMenu
+                            open={isFieldsMenuOpen}
+                            pos={fieldsMenuPos}
+                            userColumns={userColumns}
+                            dragKeyRef={dragKeyRef}
+                            saveBusy={fieldsSaveBusy}
+                            resetBusy={fieldsResetBusy}
+                            saveError={fieldsSaveError}
+                            onReorder={(fromKey, toKey) => {
+                                setUserColumns((prev) => {
+                                    const fromIdx = prev.findIndex(x => x.key === fromKey);
+                                    const toIdx = prev.findIndex(x => x.key === toKey);
+                                    if (fromIdx < 0 || toIdx < 0) return prev;
+                                    const next = [...prev];
+                                    const [moved] = next.splice(fromIdx, 1);
+                                    next.splice(toIdx, 0, moved);
+                                    return next;
+                                });
+                            }}
+                            onToggleVisible={(key, visible) => {
+                                setUserColumns((prev) => prev.map(x => x.key === key ? { ...x, visible } : x));
+                            }}
+                            onReset={
+                                props.onHeaderSave
+                                    ? async () => {
+                                        setFieldsSaveError(null);
+                                        setFieldsResetBusy(true);
+                                        await new Promise<void>((resolve) => {
+                                            requestAnimationFrame(() => resolve());
+                                        });
+                                        try {
+                                            if (activeName) {
+                                                setSheetColumnState((prev) => {
+                                                    const next = { ...prev };
+                                                    delete next[activeName];
+                                                    return next;
+                                                });
+                                            }
+                                            setUserColumns(
+                                                headerList
+                                                    .filter((c) => !isHiddenHeaderKey(c.key))
+                                                    .map((c) => ({
+                                                        key: c.key,
+                                                        label: String(c.name ?? c.key),
+                                                        visible: true,
+                                                    })),
+                                            );
+                                            if (props.onHeaderReset) {
+                                                await Promise.resolve(props.onHeaderReset());
+                                            }
+                                        } finally {
+                                            setFieldsResetBusy(false);
+                                        }
+                                    }
+                                    : undefined
+                            }
+                            onSave={async () => {
+                                const payload: HeaderState[] = toHeaderState(userColumns, colWidthByKey);
+                                if (!props.onHeaderSave || !activeName) {
+                                    setIsFieldsMenuOpen(false);
+                                    return;
+                                }
+                                setFieldsSaveError(null);
+                                setFieldsSaveBusy(true);
+                                try {
+                                    setSheetColumnState((prev) => ({
+                                        ...prev,
+                                        [activeName]: {
+                                            userColumns,
+                                            colWidths: colWidthByKey,
+                                        },
+                                    }));
+                                    await props.onHeaderSave({
+                                        sheetName: activeName,
+                                        headers: payload,
+                                    });
+                                    setIsFieldsMenuOpen(false);
+                                } catch (err) {
+                                    setFieldsSaveError(headerSaveErrorMessage(err));
+                                } finally {
+                                    setFieldsSaveBusy(false);
+                                }
+                            }}
+                        />
+
                         <div
                             style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 10,
-                                padding: "10px 14px",
-                                borderRadius: 8,
-                                background: "rgba(255,255,255,0.9)",
-                                border: "1px solid #d1d5db",
-                                color: "#111827",
-                                fontSize: 13,
-                                fontWeight: 600,
+                                display: "flex",
+                                flexDirection: "column",
+                                flex: "1 1 0%",
+                                minHeight: 0,
+                                minWidth: 0,
+                                width: "100%",
+                                filter: gridBodyBusy ? "blur(2px)" : undefined,
+                                pointerEvents: gridBodyBusy ? "none" : undefined,
+                                transition: "filter 120ms ease",
                             }}
                         >
-                            <span
-                                className={`jsgrid-delete-spin-dot-${deleteSpinClass}`}
-                                style={{
-                                    width: 16,
-                                    height: 16,
-                                    borderRadius: "50%",
-                                    border: "2px solid #e5e7eb",
-                                    borderTopColor: "#ef4444",
-                                    boxSizing: "border-box",
-                                }}
-                                aria-hidden
-                            />
-                            삭제 중...
-
-                            <style>{`
-                                @keyframes jsgrid-delete-spin-${deleteSpinClass} {
-                                    to { transform: rotate(360deg); }
-                                }
-                                .jsgrid-delete-spin-dot-${deleteSpinClass} {
-                                    animation: jsgrid-delete-spin-${deleteSpinClass} 0.75s linear infinite;
-                                }
-                            `}</style>
+                            {sheets.length === 0 ? (
+                                <div
+                                    role="status"
+                                    aria-live="polite"
+                                    style={{
+                                        flex: 1,
+                                        minHeight: 0,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        color: "#64748b",
+                                        fontSize: 13,
+                                        backgroundColor: "#ffffff",
+                                    }}
+                                >
+                                    데이터가 없습니다.
+                                </div>
+                            ) : (
+                                <JsGridTable
+                                    ref={tableRef}
+                                    columns={columns}
+                                    data={sortedData}
+                                    sourceRowIndexes={sourceRowIndexes}
+                                    cellErrorLookup={cellErrorLookup}
+                                    isCellModified={isCellModified}
+                                    sortKey={sortKey}
+                                    sortDir={sortDir}
+                                    headerCellRefs={headerCellRefs}
+                                    colWidthByKey={colWidthByKey}
+                                    onColumnWidthChange={setColumnWidth}
+                                    onLayoutColumnWidths={onLayoutColumnWidths}
+                                    setFreezeUntilIndex={setFreezeUntilIndex}
+                                    getStickyStyle={getStickyStyle}
+                                    rowSelection={rowSelection}
+                                    editable={props.editable === true}
+                                    rowIdKey={props.rowIdKey}
+                                    onCellChange={props.editable === true ? tableCellChange : undefined}
+                                    onCellsPaste={props.editable === true ? tableCellsPaste : undefined}
+                                    onSortChange={(next) => {
+                                        setSortKey(next.key);
+                                        setSortDir(next.direction);
+                                    }}
+                                />
+                            )}
                         </div>
+
+                        {sheets.length > 0 ? (
+                            <SheetErrorBar
+                                key={activeName ?? ""}
+                                errors={activeSheet?.errors}
+                                sheetName={activeName}
+                                onFocusCell={handleSheetErrorFocus}
+                            />
+                        ) : null}
+
+                        {gridBodyOverlay ? (
+                            <div
+                                role="status"
+                                aria-live="polite"
+                                aria-busy
+                                style={{
+                                    position: "absolute",
+                                    inset: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    background: "rgba(255,255,255,0.35)",
+                                    zIndex: 3,
+                                    pointerEvents: "none",
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 10,
+                                        padding: "10px 14px",
+                                        borderRadius: 8,
+                                        background: "rgba(255,255,255,0.9)",
+                                        border: "1px solid #d1d5db",
+                                        color: "#111827",
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    <span
+                                        className={`jsgrid-body-overlay-spin-dot-${gridOverlaySpinClass}`}
+                                        style={{
+                                            width: 16,
+                                            height: 16,
+                                            borderRadius: "50%",
+                                            border: "2px solid #e5e7eb",
+                                            borderTopColor: gridBodyOverlay.accent,
+                                            boxSizing: "border-box",
+                                        }}
+                                        aria-hidden
+                                    />
+                                    {gridBodyOverlay.label}
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
-                ) : null}
                 </div>
-            </div>
+            </JsGridRowSelectionProvider>
+        </JsGridToolbarProvider>
     );
 }

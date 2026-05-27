@@ -1,3 +1,18 @@
+/** `JsGridTable` 에서 잰 열 너비 배열 → `computeLeftOffsets` 용 맵. */
+export function columnWidthsToKeyMap(
+    columns: readonly { key?: string | number }[],
+    widths: readonly number[],
+): Record<string, number> {
+    const map: Record<string, number> = {};
+    for (let i = 0; i < columns.length; i++) {
+        const w = widths[i];
+        if (w == null || w <= 0) continue;
+        const key = String(columns[i]?.key ?? i);
+        map[key] = w;
+    }
+    return map;
+}
+
 export function computeLeftOffsets(columns: readonly unknown[], colWidthByKey: Record<string, number>) {
     const offsets: number[] = [];
     let acc = 0;

@@ -1,82 +1,170 @@
-import {
-    JsExcelGrid,
-    applyHeaderStateToExcelGridData,
-    removeRowsByIdsFromExcelGridData,
+import { JsExcelGrid, applyHeaderStateToExcelGridData } from "./app/index.ts";
+import type {
+    ExcelGridData,
+    GridCellEditorArgs,
+    Header,
+    SheetHeaderSavePayload,
 } from "./app/index.ts";
-import type { ExcelGridData, SheetHeaderSavePayload } from "./app/index.ts";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SAMPLE_DATA } from "./testData.ts";
+
+/** 텍스트 셀 편집기 — Enter 또는 blur 시 값 적용. */
+function TextCellEditor(args: GridCellEditorArgs) {
+    const initial = args.value == null ? "" : String(args.value);
+    const [draft, setDraft] = useState(initial);
+    const ref = useRef<HTMLInputElement | null>(null);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.focus();
+        el.select();
+    }, []);
+
+    const commit = useCallback(
+        (close: boolean) => {
+            if (draft !== initial) args.onChange(draft, { close });
+            else if (close) args.onClose();
+        },
+        [draft, initial, args],
+    );
+
+    return (
+        <input
+            ref={ref}
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+                args.stopRowClick(e);
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    commit(true);
+                } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    args.onClose();
+                }
+            }}
+            onBlur={() => commit(true)}
+            onPointerDown={args.stopRowClick}
+            style={{
+                width: "100%",
+                height: "100%",
+                minWidth: 0,
+                boxSizing: "border-box",
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                font: "inherit",
+                padding: 0,
+                margin: 0,
+            }}
+        />
+    );
+}
+
+/** 셀렉트 셀 편집기 — 옵션 선택 즉시 값 적용 & 편집기 닫기. */
+function SelectCellEditor(props: GridCellEditorArgs & { options: readonly string[] }) {
+    const { options, ...args } = props;
+    const initial = args.value == null ? "" : String(args.value);
+    return (
+        <select
+            autoFocus
+            defaultValue={initial}
+            onChange={(e) => args.onChange(e.target.value, { close: true })}
+            onKeyDown={(e) => {
+                args.stopRowClick(e);
+                if (e.key === "Escape") args.onClose();
+            }}
+            onBlur={() => args.onClose()}
+            onPointerDown={args.stopRowClick}
+            style={{
+                width: "100%",
+                height: "100%",
+                minWidth: 0,
+                boxSizing: "border-box",
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                font: "inherit",
+            }}
+        >
+            <option value="">(선택 없음)</option>
+            {options.map((o) => (
+                <option key={o} value={o}>
+                    {o}
+                </option>
+            ))}
+        </select>
+    );
+}
+
+const SLA_OPTIONS = ["1등급", "2등급", "3등급"] as const;
+
+/** 시트별로 일부 컬럼에 편집기를 주입한 사본을 반환한다. */
+function withDemoEditors(data: ExcelGridData): ExcelGridData {
+    const next: ExcelGridData = {};
+    for (const [sheetName, body] of Object.entries(data)) {
+        const headers: Header[] = body.headers.map((h) => {
+            if (h.key === "assetName") {
+                return { ...h, editor: (args) => <TextCellEditor {...args} /> };
+            }
+            if (h.key === "slaGroup") {
+                return {
+                    ...h,
+                    editor: (args) => (
+                        <SelectCellEditor {...args} options={SLA_OPTIONS} />
+                    ),
+                };
+            }
+            return h;
+        });
+        next[sheetName] = { ...body, headers };
+    }
+    return next;
+}
 
 const App = () => {
     const [data, setData] = useState<ExcelGridData>(SAMPLE_DATA);
+    const dataWithEditors = useMemo(() => withDemoEditors(data), [data]);
 
-    // api요청 테스트용 헤더 저장 메서드
     const headerApi = useCallback(async (payload: SheetHeaderSavePayload) => {
         console.log("header 저장 요청", payload.sheetName, payload.headers.length, "건");
-        await new Promise((r) => setTimeout(r, 150));
+        await new Promise((r) => setTimeout(r, 300));
     }, []);
-
-    //api요청 테스트용 삭제 메서드
-    const deleteApi = (ids: number[]) =>
-        new Promise<void>((resolve) => {
-            console.log("delete 요청", ids);
-            window.setTimeout(() => resolve(), 1000);
-        });
 
     const onHeaderSave = useCallback(
         async (payload: SheetHeaderSavePayload) => {
-            // 실제 연동 시 아래 headerApi 구현만 교체하면 된다.
             await headerApi(payload);
-
             setData((prev) => applyHeaderStateToExcelGridData({ data: prev, payload }));
         },
         [headerApi],
     );
 
-    const onUploadFiles = useCallback(async (files: File[]) => {
-        await new Promise((r) => setTimeout(r, 1500));
-        console.log(
-            "업로드 완료 샘플",
-            files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
-        );
+    const onHeaderReset = useCallback(async () => {
+        console.log("reset clicked");
+        await new Promise((r) => setTimeout(r, 300));
     }, []);
 
-    const onHeaderReset = useCallback(() => console.log("reset clicked"), []);
-    const onDownloadClick = useCallback(() => console.log("download Clicked"), []);
-
-    const onDeleteClick = useCallback(async (rows: unknown[]) => {
-        // 테스트 데이터의 id 는 문자열("177") 형태이므로 number 로 변환 후 사용한다.
-        const ids = rows
-            .map((r) => {
-                const v = (r as { id?: unknown }).id;
-                if (typeof v === "number") return v;
-                if (typeof v === "string") {
-                    const n = Number(v);
-                    return Number.isFinite(n) ? n : null;
-                }
-                return null;
-            })
-            .filter((id): id is number => id != null && Number.isFinite(id));
-
-        if (ids.length === 0) return;
-        await deleteApi(ids);
-
-        setData((prev) => removeRowsByIdsFromExcelGridData({ data: prev, ids }));
-    }, []);
-
-    const onRowClick = useCallback((row: unknown) => console.log("rowClick", row), []);
+    const isAdmin = true;
 
     return (
         <div>
-            <div style={{ width: "1100px", height: "640px", display: "flex", flexDirection: "column", background: "red" }}>
+            <div
+                style={{
+                    width: "1200px",
+                    height: "640px",
+                    display: "flex",
+                    flexDirection: "column",
+                    background: "red",
+                }}
+            >
                 <JsExcelGrid
-                    data={data}
-                    onHeaderSave={onHeaderSave}
-                    onUploadFiles={onUploadFiles}
+                    data={dataWithEditors}
+                    onHeaderSave={isAdmin ? onHeaderSave : undefined}
                     onHeaderReset={onHeaderReset}
-                    onDownloadClick={onDownloadClick}
-                    onDeleteClick={onDeleteClick}
-                    onRowClick={onRowClick}
+                    editable={isAdmin}
+                    onCellChange={(v)=>console.log(v)}
                 />
             </div>
         </div>

@@ -1,6 +1,8 @@
 import type {CSSProperties, PointerEvent} from "react";
 import {useCallback, useRef, useState} from "react";
 import type {Sheet} from "../type/Type.ts";
+import { hasSheetErrors } from "./sheetErrors.ts";
+import SheetTabErrorDot from "./SheetTabErrorDot.tsx";
 import "./SheetTabs.css";
 
 /** 이 거리(px) 이상 포인터가 움직여야 좌우 드래그(패닝)로 간주한다 */
@@ -107,6 +109,8 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
     const ACTIVE_ACCENT_BG = "#dadfee";
     const INACTIVE_ACCENT = "#e5e5e5";
     const INACTIVE_ACCENT_BG = "#dcdcdc";
+    const TAB_BAR_HEIGHT = 30;
+    const TAB_BAR_PAD_TOP = 6;
 
     return (
         <div
@@ -119,12 +123,13 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
             style={{
                 backgroundColor: BAR_BG,
                 borderBottom: "1px solid #bdc2c9",
-                height: 30,
-                padding: "0 10px",
+                boxSizing: "border-box",
+                minHeight: TAB_BAR_HEIGHT + TAB_BAR_PAD_TOP,
+                paddingTop: TAB_BAR_PAD_TOP,
                 display: "flex",
                 alignItems: "stretch",
                 overflowX: "auto",
-                overflowY: "hidden",
+                overflowY: "visible",
                 cursor: isPanning ? "grabbing" : "default",
                 touchAction: "none",
                 userSelect: "none",
@@ -136,16 +141,19 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
                 const active = i === activeIndex;
                 const label = (s.name && String(s.name).trim()) ? String(s.name) : `Sheet ${i + 1}`;
                 const count = Array.isArray(s.data) ? s.data.length : 0;
+                const sheetHasErrors = hasSheetErrors(s.errors);
                 return (
                     <div
                         key={`${label}\u0000${i}`}
                         data-sheet-index={i}
+                        title={sheetHasErrors ? `${label}: 검증 오류 있음` : label}
                         style={{
                             flexShrink: 0,
                             fontSize: 12,
-                            height: 30,
-                            padding: "0 18px",
-                            lineHeight: "30px",
+                            height: TAB_BAR_HEIGHT,
+                            padding: "0 16px",
+                            display: "flex",
+                            alignItems: "center",
                             borderBottom: "none",
                             borderRadius: 0,
                             appearance: "none",
@@ -155,6 +163,8 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
                             whiteSpace: "nowrap",
                             outline: "none",
                             boxSizing: "border-box",
+                            position: "relative",
+                            overflow: "visible",
                             ...(active
                                 ? {
                                     boxShadow: `inset 0 -2px 0 ${ACTIVE_ACCENT}`,
@@ -168,15 +178,21 @@ export default function SheetTabs({ sheets, activeIndex, onChange, style }: Prop
                         }}
                         aria-pressed={active}
                     >
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                            <span>{label}</span>
+                        {sheetHasErrors ? (
+                            <span aria-label="검증 오류">
+                                <SheetTabErrorDot />
+                            </span>
+                        ) : null}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ lineHeight: 1.25 }}>{label}</span>
                             <span
                                 style={{
-                                    height:'18px',
-                                    lineHeight:'19px',
-                                    padding:'0 3px',
-                                    borderRadius : '5px',
+                                    height: 18,
+                                    lineHeight: "18px",
+                                    padding: "0 5px",
+                                    borderRadius: 5,
                                     fontSize: 11,
+                                    fontWeight: 600,
                                     color: active ? ACTIVE_ACCENT : "#949494",
                                     background: active ? ACTIVE_ACCENT_BG : INACTIVE_ACCENT_BG,
                                 }}
