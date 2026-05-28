@@ -16,7 +16,9 @@ export function widthByKeyMapsNearlyEqual(
 ): boolean {
     const keys = Object.keys(a);
     if (keys.length !== Object.keys(b).length) return false;
-    return keys.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 0.5);
+    // ResizeObserver/서브픽셀/스크롤바 등으로 1px 정도 튀는 경우가 있어
+    // 이 정도는 동일로 취급해 무한 렌더 루프를 방지한다.
+    return keys.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) <= 2);
 }
 
 /** `JsGridTable` 에서 잰 열 너비 배열 → `computeLeftOffsets` 용 맵. */

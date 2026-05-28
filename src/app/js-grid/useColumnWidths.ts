@@ -2,6 +2,29 @@ import {useCallback, useLayoutEffect, useRef, useState} from "react";
 import type {JsGridTableColumn} from "../type/Type.ts";
 import {COL_RESIZE_MAX_PX, DEFAULT_DATA_COL_WIDTH_PX} from "./gridStyles.ts";
 
+function shallowEqualNumberMap(a: Record<string, number>, b: Record<string, number>): boolean {
+    const ak = Object.keys(a);
+    const bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (const k of ak) {
+        if ((a[k] ?? 0) !== (b[k] ?? 0)) return false;
+    }
+    return true;
+}
+
+function sameMeasuredForColumns(
+    prev: Record<string, number>,
+    next: Record<string, number>,
+    columns: readonly JsGridTableColumn[],
+): boolean {
+    for (let i = 0; i < columns.length; i++) {
+        const k = String(columns[i]?.key ?? i);
+        if ((prev[k] ?? 0) !== (next[k] ?? 0)) return false;
+    }
+    // prev에 남아있는 과거 키는 무시(시트 전환 시)
+    return true;
+}
+
 export function useColumnWidths(
     columns: readonly JsGridTableColumn[],
     persistedWidthByKey: Record<string, number>,
@@ -39,21 +62,25 @@ export function useColumnWidths(
                 for (const [k, v] of Object.entries(persistedWidthByKey)) {
                     if (v > 0) next[k] = normalizeSavedWidthPx(v);
                 }
-                setOverrideWidthByKey(() => next);
+                setOverrideWidthByKey((prev) => (shallowEqualNumberMap(prev, next) ? prev : next));
             } else {
                 // persisted가 새로 생긴 경우만 보강 (사용자 드래그 값은 유지)
                 setOverrideWidthByKey((prev) => {
+                    let changed = false;
                     const nextMap = { ...prev };
                     for (const [k, v] of Object.entries(persistedWidthByKey)) {
-                        if (!(k in nextMap) && v > 0) nextMap[k] = normalizeSavedWidthPx(v);
+                        if (!(k in nextMap) && v > 0) {
+                            nextMap[k] = normalizeSavedWidthPx(v);
+                            changed = true;
+                        }
                     }
-                    return nextMap;
+                    return changed ? nextMap : prev;
                 });
             }
 
             // 2) 측정값 갱신: 렌더된 실제 폭을 측정해 스티키 계산에 사용
             setMeasuredWidthByKey((prev) => {
-                const next: Record<string, number> = { ...prev };
+                const next: Record<string, number> = {};
                 const keysInCols = new Set<string>();
                 columns.forEach((col, idx) => {
                     const key = String(col.key ?? idx);
@@ -65,10 +92,9 @@ export function useColumnWidths(
                         ?? 0;
                     if (measured > 0) next[key] = Math.round(measured);
                 });
-                for (const k of Object.keys(next)) {
-                    if (!keysInCols.has(k)) delete next[k];
-                }
-                return next;
+                // 모든 컬럼의 측정이 안 잡혔으면 갱신하지 않는다.
+                if (columns.length > 0 && Object.keys(next).length < keysInCols.size) return prev;
+                return sameMeasuredForColumns(prev, next, columns) ? prev : next;
             });
         });
         return () => cancelAnimationFrame(id);

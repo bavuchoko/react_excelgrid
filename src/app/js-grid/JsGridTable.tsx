@@ -1,13 +1,9 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { formatCellDisplayValue, getValue } from "../hook/CommonMethod.ts";
-import {
-    columnsWidthSignature,
-    widthByKeyMapsNearlyEqual,
-} from "./columnLayout.ts";
+// (주의) 헤더 실측 너비를 state로 되먹이면 ResizeObserver ↔ setState 루프가 나기 쉽다.
 import {
     CELL_MAX_WIDTH_PX,
     COL_RESIZE_MAX_PX,
-    COL_RESIZE_MIN_PX,
     DEFAULT_DATA_COL_WIDTH_PX,
     GRID_BORDER,
 } from "./gridStyles.ts";
@@ -247,12 +243,6 @@ type Props = {
 const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(props, ref) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const headTableRef = useRef<HTMLTableElement>(null);
-    /** 헤더에서 잰 기본 너비 — **열 key** 기준(순서 변경 시 인덱스 오염 방지). */
-    const [measuredWidthByKey, setMeasuredWidthByKey] = useState<Record<string, number>>({});
-    const columnsWidthSig = useMemo(
-        () => columnsWidthSignature(props.columns),
-        [props.columns],
-    );
 
     const editingEnabled = props.editable === true;
     const rowIdKey = props.rowIdKey ?? "id";
@@ -534,63 +524,14 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
         return () => window.removeEventListener("mousedown", onDown);
     }, [editingEnabled]);
 
-    useLayoutEffect(() => {
-        setMeasuredWidthByKey({});
-    }, [columnsWidthSig]);
-
-    const syncColumnWidthsFromHeader = useCallback(() => {
-        const n = props.columns.length;
-        const cells = props.headerCellRefs.current;
-        if (!cells.length || cells.length < n) return;
-        const table = headTableRef.current;
-        const nextByKey: Record<string, number> = {};
-        const nextByIndex: number[] = new Array<number>(n);
-        for (let i = 0; i < n; i++) {
-            const colKey = String(props.columns[i]?.key ?? i);
-            const el = cells[i];
-            if (!el?.isConnected) {
-                nextByIndex[i] = 0;
-                continue;
-            }
-            /** `offsetWidth` 정수 — `getBoundingClientRect` 소수 라운딩으로 헤더/본문 불일치 방지 */
-            const ow = typeof el.offsetWidth === "number" ? el.offsetWidth : 0;
-            const w = ow > 0 ? ow : Math.round(el.getBoundingClientRect().width);
-            nextByIndex[i] = w;
-            if (w > 0) nextByKey[colKey] = w;
-        }
-        if (nextByIndex.some((w) => w <= 0)) return;
-        /** 합계와 테이블 전체 픽셀 차(최대 2~3px)를 마지막 열에 흡수 — 세로 줄 1px 어긋남 완화 */
-        if (table && n >= 1) {
-            const tw = table.offsetWidth;
-            const sum = sumWidths(nextByIndex);
-            const diff = tw - sum;
-            if (diff !== 0 && Math.abs(diff) <= 4) {
-                const lastIdx = n - 1;
-                const lastKey = String(props.columns[lastIdx]?.key ?? lastIdx);
-                const adjusted = Math.max(COL_RESIZE_MIN_PX, nextByIndex[lastIdx] + diff);
-                nextByIndex[lastIdx] = adjusted;
-                nextByKey[lastKey] = adjusted;
-            }
-        }
-        setMeasuredWidthByKey((prev) =>
-            widthByKeyMapsNearlyEqual(prev, nextByKey) ? prev : nextByKey,
-        );
-    }, [props.columns]);
-
-    useLayoutEffect(() => {
-        syncColumnWidthsFromHeader();
-    }, [
-        syncColumnWidthsFromHeader,
-        props.colWidthByKey,
-        props.sortKey,
-        props.sortDir,
-        columnsWidthSig,
-    ]);
+    // (중요) 헤더 실측값을 state로 갱신하면서 그 값을 다시 colgroup/width로 적용하면
+    // ResizeObserver/레이아웃 변화가 서로를 트리거해서 "Maximum update depth"가 난다.
+    // 여기서는 실측 기반 자동 너비 동기화를 하지 않는다(드래그/저장 너비만 반영).
 
     const colsLen = props.columns.length;
     const columnResizable = props.columnResizable !== false && Boolean(props.onColumnWidthChange);
 
-    /** 측정값 + 사용자 리사이즈(`colWidthByKey`) — 드래그 중 즉시 반영. */
+    /** 사용자 리사이즈(`colWidthByKey`)만 즉시 반영. */
     const effectiveColWidths = useMemo(() => {
         const out = new Array<number>(colsLen);
         for (let i = 0; i < colsLen; i++) {
@@ -600,34 +541,17 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                 out[i] = Math.max(DEFAULT_DATA_COL_WIDTH_PX, Math.round(overridden));
                 continue;
             }
-            const measured = measuredWidthByKey[colKey];
-            out[i] = typeof measured === "number" && measured > 0 ? measured : 0;
+            // 저장/드래그 값이 없으면 기본 시작 폭으로 둔다.
+            out[i] = DEFAULT_DATA_COL_WIDTH_PX;
         }
         return out;
-    }, [colsLen, props.columns, props.colWidthByKey, measuredWidthByKey]);
+    }, [colsLen, props.columns, props.colWidthByKey]);
 
     const colWidthsReady =
         effectiveColWidths.length === colsLen && effectiveColWidths.every((w) => w > 0);
     const totalGridWidth = colWidthsReady ? sumWidths(effectiveColWidths) : 0;
 
-    useLayoutEffect(() => {
-        const table = headTableRef.current;
-        if (!table) return;
-        let raf = 0;
-        const run = () => {
-            syncColumnWidthsFromHeader();
-            raf = requestAnimationFrame(() => {
-                syncColumnWidthsFromHeader();
-            });
-        };
-        run();
-        const ro = new ResizeObserver(() => run());
-        ro.observe(table);
-        return () => {
-            cancelAnimationFrame(raf);
-            ro.disconnect();
-        };
-    }, [syncColumnWidthsFromHeader]);
+    // ResizeObserver 기반 너비 sync 제거(무한 업데이트 루프 방지)
 
     /** TanStack Virtual: 스크롤 위치 함수가 메모 불가하다고 보는 React Compiler 규칙만 예외 처리 */
     // eslint-disable-next-line react-hooks/incompatible-library

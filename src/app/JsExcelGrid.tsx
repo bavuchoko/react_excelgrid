@@ -372,9 +372,11 @@ export default function  JsExcelGrid(props: GridType) {
 
     const showRowSelection = props.enableRowSelection === true;
 
+    // 시트가 바뀌면 이전 시트의 컬럼 너비 override를 초기화해야 한다.
+    // 헤더 키 구성이 동일한 시트끼리는 widthSig가 같아질 수 있으므로 sheetName을 포함한다.
     const headerWidthSig = useMemo(
-        () => headerList.map((h) => `${h.key}:${h.width ?? ""}`).join("\u0001"),
-        [headerList],
+        () => `${activeName ?? ""}\u0001${headerList.map((h) => `${h.key}:${h.width ?? ""}`).join("\u0001")}`,
+        [activeName, headerList],
     );
     const persistedColWidths = useMemo(() => {
         const saved = activeName ? sheetColumnState[activeName] : undefined;
@@ -603,21 +605,31 @@ export default function  JsExcelGrid(props: GridType) {
     }, [columnsWidthSig]);
 
     const applyUserColumnsLayout = useCallback(
-        (nextColumns: UserColumn[], widths: Record<string, number> = colWidthByKey) => {
+        (nextColumns: UserColumn[], widths: Record<string, number>) => {
             if (!activeName || nextColumns.length === 0) return;
+            // 시트 전환 직후에는 `userColumns`가 이전 시트 상태를 잠깐 들고 있을 수 있다.
+            // 이 상태로 새 시트의 headers에 레이아웃을 적용하면 UI가 깨질 수 있으므로,
+            // 현재 시트에 존재하는 키만 가진 경우에만 반영한다.
+            const activeKeys = new Set(
+                headerList
+                    .filter((h) => !isHiddenHeaderKey(h.key))
+                    .map((h) => h.key),
+            );
+            for (const c of nextColumns) {
+                if (!activeKeys.has(c.key)) return;
+            }
             setSheetColumnState((prev) => ({
                 ...prev,
                 [activeName]: { userColumns: nextColumns, colWidths: widths },
             }));
             syncSheetHeaderLayout(activeName, nextColumns, widths);
         },
-        [activeName, colWidthByKey, syncSheetHeaderLayout],
+        [activeName, syncSheetHeaderLayout, headerList],
     );
 
-    useEffect(() => {
-        if (!activeName || userColumns.length === 0) return;
-        applyUserColumnsLayout(userColumns, colWidthByKey);
-    }, [activeName, userColumns, colWidthByKey, applyUserColumnsLayout]);
+    // (중요) `userColumns`를 useEffect로 headers에 자동 동기화하면
+    // `headers → userColumns → headers` 피드백 루프가 생겨 무한 렌더링이 발생할 수 있다.
+    // 레이아웃 반영은 사용자가 실제로 순서/표시/너비를 변경하는 이벤트에서만 수행한다.
 
     const layoutWidths = useMemo(
         () =>
@@ -1048,14 +1060,14 @@ export default function  JsExcelGrid(props: GridType) {
                                     const next = [...prev];
                                     const [moved] = next.splice(fromIdx, 1);
                                     next.splice(toIdx, 0, moved);
-                                    applyUserColumnsLayout(next);
+                                    applyUserColumnsLayout(next, colWidthByKey);
                                     return next;
                                 });
                             }}
                             onToggleVisible={(key, visible) => {
                                 setUserColumns((prev) => {
                                     const next = prev.map(x => x.key === key ? { ...x, visible } : x);
-                                    applyUserColumnsLayout(next);
+                                    applyUserColumnsLayout(next, colWidthByKey);
                                     return next;
                                 });
                             }}
