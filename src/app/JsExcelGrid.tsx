@@ -171,6 +171,9 @@ export default function  JsExcelGrid(props: GridType) {
         gridDataRef.current = next;
         setGridData(next);
         baselineBySheetRef.current = {};
+        // 외부에서 새 데이터를 내려주면(= refresh) 수정 표시/dirty 추적도 초기화한다.
+        dirtyCellsRef.current = new Set();
+        setDirtyRevision((v) => v + 1);
     }, [props.data]);
 
     // 외부 입력은 `Record<sheetName, SheetBody>` 모양이므로, 내부 사용을 위해 배열(`Sheet[]`)로 정규화한다.
