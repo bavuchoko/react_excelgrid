@@ -171,9 +171,7 @@ export default function  JsExcelGrid(props: GridType) {
         gridDataRef.current = next;
         setGridData(next);
         baselineBySheetRef.current = {};
-        // 외부에서 새 데이터를 내려주면(= refresh) 수정 표시/dirty 추적도 초기화한다.
-        dirtyCellsRef.current = new Set();
-        setDirtyRevision((v) => v + 1);
+        setBaselineRevision((v) => v + 1);
     }, [props.data]);
 
     // 외부 입력은 `Record<sheetName, SheetBody>` 모양이므로, 내부 사용을 위해 배열(`Sheet[]`)로 정규화한다.
@@ -237,44 +235,31 @@ export default function  JsExcelGrid(props: GridType) {
         [activeSheet?.errors],
     );
 
-    /** 시트별 최초 진입 시 `gridData` 스냅샷 — 편집·붙여넣기와 비교해 수정 셀을 표시. */
-    const baselineData = useMemo(() => {
-        if (!activeName) return undefined;
+    /** baseline(ref) 갱신을 렌더에 반영하기 위한 revision */
+    const [baselineRevision, setBaselineRevision] = useState(0);
+
+    /**
+     * 시트별 최초 진입 시 `gridData` 스냅샷(baseline).
+     * 중요: baseline을 늦게 잡으면(첫 편집 후) "빈 값 → 입력(수정 아님)" 같은 역전 현상이 생길 수 있어
+     * active sheet가 준비되는 즉시 baseline을 만든다.
+     */
+    useEffect(() => {
+        if (!activeName) return;
+        if (baselineBySheetRef.current[activeName]) return;
         const rows = gridData[activeName]?.data;
-        if (!rows) return undefined;
-        if (!baselineBySheetRef.current[activeName]) {
-            baselineBySheetRef.current[activeName] = structuredClone(rows);
-        }
-        return baselineBySheetRef.current[activeName];
+        if (!rows) return;
+        baselineBySheetRef.current[activeName] = structuredClone(rows);
+        setBaselineRevision((v) => v + 1);
     }, [activeName, gridData]);
 
-    const dirtyCellsRef = useRef<Set<string>>(new Set());
-    const [dirtyRevision, setDirtyRevision] = useState(0);
-
-    const dirtyCellKey = useCallback(
-        (sourceRowIndex: number, columnKey: string) =>
-            `${activeName ?? ""}\u0000${sourceRowIndex}\u0000${columnKey}`,
-        [activeName],
-    );
-
-    const markCellDirty = useCallback(
-        (sourceRowIndex: number, columnKey: string) => {
-            if (!activeName || sourceRowIndex < 0) return;
-            const key = dirtyCellKey(sourceRowIndex, columnKey);
-            if (dirtyCellsRef.current.has(key)) return;
-            dirtyCellsRef.current.add(key);
-            setDirtyRevision((v) => v + 1);
-        },
-        [activeName, dirtyCellKey],
+    const baselineData = useMemo(
+        () => (activeName ? baselineBySheetRef.current[activeName] : undefined),
+        [activeName, baselineRevision],
     );
 
     const isCellModified = useCallback(
         (sourceRowIndex: number, columnKey: string, currentRow: Content) => {
-            void dirtyRevision;
             if (!activeName || sourceRowIndex < 0) return false;
-            if (dirtyCellsRef.current.has(dirtyCellKey(sourceRowIndex, columnKey))) {
-                return true;
-            }
             return isCellModifiedFromBaseline(
                 baselineData,
                 sourceRowIndex,
@@ -282,7 +267,7 @@ export default function  JsExcelGrid(props: GridType) {
                 currentRow,
             );
         },
-        [activeName, baselineData, dirtyCellKey, dirtyRevision],
+        [activeName, baselineData],
     );
 
     const enablePseudoFullscreen = props.enablePseudoFullscreen !== false;
@@ -823,9 +808,6 @@ export default function  JsExcelGrid(props: GridType) {
         (event: GridCellEditEvent) => {
             if (!activeName) return;
             if (areCellValuesEqual(event.previousValue, event.value)) return;
-            if (event.sourceRowIndex >= 0) {
-                markCellDirty(event.sourceRowIndex, event.columnKey);
-            }
             const rowId = resolveChangeRowId(event.row, event.sourceRowIndex, rowIdKey);
             const rowIds = rowId != null ? [rowId] : [];
             commitGridData((prev) => applySheetCellEdit(prev, activeName, event));
@@ -840,7 +822,7 @@ export default function  JsExcelGrid(props: GridType) {
             };
             void Promise.resolve(props.onCellChange?.(sheetEvent));
         },
-        [props.onCellChange, activeName, markCellDirty, rowIdKey, commitGridData],
+        [props.onCellChange, activeName, rowIdKey, commitGridData],
     );
 
     const tableCellsPaste = useCallback(
@@ -848,13 +830,6 @@ export default function  JsExcelGrid(props: GridType) {
             if (!activeName) return;
             const changedBatches = filterChangedPasteBatches(batches);
             if (changedBatches.length === 0) return;
-            for (const batch of changedBatches) {
-                for (const it of batch.items) {
-                    if (it.sourceRowIndex >= 0) {
-                        markCellDirty(it.sourceRowIndex, it.columnKey);
-                    }
-                }
-            }
             const sheetBatches: SheetCellPasteBatch[] = changedBatches.map((b) => ({
                 ...b,
                 sheetName: activeName,
@@ -874,7 +849,7 @@ export default function  JsExcelGrid(props: GridType) {
             }
             void Promise.resolve(props.onCellsPaste?.(sheetBatches));
         },
-        [props.onCellChange, props.onCellsPaste, activeName, markCellDirty, commitGridData],
+        [props.onCellChange, props.onCellsPaste, activeName, commitGridData],
     );
 
     /** 시트 에러 바에서 셀로 점프하기 위한 명령형 ref. */

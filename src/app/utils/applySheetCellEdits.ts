@@ -6,6 +6,14 @@ import type {
     SheetCellPasteBatch,
 } from "../type/Type.ts";
 
+function resolveRowId(row: unknown, key: string): string | number | null {
+    if (row == null || typeof row !== "object") return null;
+    const v = (row as Record<string, unknown>)[key];
+    if (typeof v === "string" || typeof v === "number") return v;
+    if (v == null) return null;
+    return String(v);
+}
+
 /** 단일 셀 편집을 `ExcelGridData` 에 반영한다. */
 export function applySheetCellEdit(
     data: ExcelGridData,
@@ -20,6 +28,12 @@ export function applySheetCellEdit(
     let rowIdx = event.sourceRowIndex;
     if (rowIdx < 0 || rowIdx >= sheet.data.length) {
         rowIdx = sheet.data.indexOf(event.row as Content);
+    }
+    if (rowIdx < 0) {
+        const id = resolveRowId(event.row, "id");
+        if (id != null) {
+            rowIdx = sheet.data.findIndex((r) => resolveRowId(r, "id") === id);
+        }
     }
     if (rowIdx < 0) return data;
 
@@ -49,7 +63,15 @@ export function applySheetCellsPaste(
                 it.sourceRowIndex >= 0 && it.sourceRowIndex < sheet.data.length
                     ? it.sourceRowIndex
                     : sheet.data.indexOf(it.row as Content);
-            if (idx >= 0) updates.set(idx, batch.value);
+            if (idx >= 0) {
+                updates.set(idx, batch.value);
+                continue;
+            }
+            const id = resolveRowId(it.row, "id");
+            if (id != null) {
+                const byId = sheet.data.findIndex((r) => resolveRowId(r, "id") === id);
+                if (byId >= 0) updates.set(byId, batch.value);
+            }
         }
         if (updates.size === 0) continue;
 
