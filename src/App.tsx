@@ -107,15 +107,19 @@ function withDemoEditors(data: ExcelGridData): ExcelGridData {
     for (const [sheetName, body] of Object.entries(data)) {
         const headers: Header[] = body.headers.map((h) => {
             if (h.key === "assetName") {
-                return { ...h, editor: (args) => <TextCellEditor {...args} /> };
+                return { ...h, editor: (args) => <TextCellEditor {...args} />, filterable: true };
             }
             if (h.key === "slaGroup") {
                 return {
                     ...h,
+                    filterable: true,
                     editor: (args) => (
                         <SelectCellEditor {...args} options={SLA_OPTIONS} />
                     ),
                 };
+            }
+            if (h.key === "task" || h.key === "department" || h.key === "location") {
+                return { ...h, filterable: true };
             }
             return h;
         });

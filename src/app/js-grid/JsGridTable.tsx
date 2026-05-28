@@ -236,6 +236,12 @@ type Props = {
         columnKey: string,
         currentRow: Content,
     ) => boolean;
+    /** 필터가 활성된 컬럼 key 집합 — 헤더 아이콘 강조용 */
+    filteredColumnKeys?: ReadonlySet<string>;
+    /** 현재 열려있는 필터 메뉴의 컬럼 key */
+    openFilterColumnKey?: string | null;
+    /** 헤더 필터 아이콘 클릭 시 호출(좌표 포함). 미지정이면 아이콘을 표시하지 않는다. */
+    onToggleColumnFilter?: (args: { columnKey: string; top: number; left: number }) => void;
 };
 
 const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(props, ref) {
@@ -929,6 +935,68 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                                                         ))}
                                                 </span>
                                             )}
+                                            {column.filterable && props.onToggleColumnFilter
+                                                ? (() => {
+                                                      const isOpen =
+                                                          props.openFilterColumnKey === column.key;
+                                                      const isActive =
+                                                          props.filteredColumnKeys?.has(column.key) ===
+                                                          true;
+                                                      return (
+                                                          <span
+                                                              role="button"
+                                                              tabIndex={0}
+                                                              aria-label={`${column.label} 필터`}
+                                                              data-jsgrid-filter-trigger="1"
+                                                              data-active={isOpen ? "1" : "0"}
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  const rect = (
+                                                                      e.currentTarget as HTMLElement
+                                                                  ).getBoundingClientRect();
+                                                                  props.onToggleColumnFilter?.({
+                                                                      columnKey: column.key,
+                                                                      top: rect.bottom + 4,
+                                                                      left: rect.left,
+                                                                  });
+                                                              }}
+                                                              style={{
+                                                                  display: "inline-flex",
+                                                                  alignItems: "center",
+                                                                  justifyContent: "center",
+                                                                  flexShrink: 0,
+                                                                  width: SORT_ICON_PX,
+                                                                  minWidth: SORT_ICON_PX,
+                                                                  height: SORT_ICON_PX,
+                                                                  cursor: "pointer",
+                                                                  borderRadius: 2,
+                                                                  color: isActive ? "#1d4ed8" : "#9ca3af",
+                                                                  backgroundColor: isOpen
+                                                                      ? "rgba(29,78,216,0.12)"
+                                                                      : undefined,
+                                                              }}
+                                                          >
+                                                              <svg
+                                                                  viewBox="0 0 16 16"
+                                                                  width={SORT_ICON_PX - 2}
+                                                                  height={SORT_ICON_PX - 2}
+                                                                  aria-hidden
+                                                                  focusable="false"
+                                                              >
+                                                                  <path
+                                                                      d="M2 3h12l-4.5 5.5V13l-3 1V8.5L2 3z"
+                                                                      fill={
+                                                                          isActive ? "#1d4ed8" : "none"
+                                                                      }
+                                                                      stroke="currentColor"
+                                                                      strokeWidth="1.2"
+                                                                      strokeLinejoin="round"
+                                                                  />
+                                                              </svg>
+                                                          </span>
+                                                      );
+                                                  })()
+                                                : null}
                                         </div>
                                     )}
                                     {columnResizable && isDataCol ? (
@@ -963,6 +1031,10 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                     const rowId = resolveRowId(row, rowIdKey);
                     const rowIdForClass =
                         rowId === null || rowId === undefined ? undefined : rowId;
+                    const gridTemplateColumns = colWidthsReady
+                        ? effectiveColWidths.map((w) => `${w}px`).join(" ")
+                        : undefined;
+                    const usingGridLayout = Boolean(gridTemplateColumns);
                     return (
                         <div
                             key={vr.key}
@@ -976,9 +1048,15 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                                 width: totalGridWidth > 0 ? totalGridWidth : "100%",
                                 minWidth: totalGridWidth > 0 ? totalGridWidth : "max-content",
                                 height: `${vr.size}px`,
-                                display: "flex",
-                                flexDirection: "row",
-                                flexWrap: "nowrap",
+                                /**
+                                 * `flex` → `grid`: sticky는 flex 직계 자식에서 무시된다(CSS 사양).
+                                 * grid에서는 자식이 `position: sticky`를 가질 수 있다.
+                                 * colWidthsReady 이전에는 flex 유지(너비 불확정 상태).
+                                 */
+                                display: gridTemplateColumns ? "grid" : "flex",
+                                ...(gridTemplateColumns
+                                    ? { gridTemplateColumns }
+                                    : { flexDirection: "row", flexWrap: "nowrap" }),
                                 alignItems: "stretch",
                                 boxSizing: "border-box",
                             }}
@@ -1098,6 +1176,17 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                                     ...props.getStickyStyle({ colIndex: cdex, isHeader: false }),
                                 };
 
+                                /**
+                                 * 본문 행을 grid로 렌더링하는 경우, 셀 너비는 track이 결정한다.
+                                 * 기존 `width: max(..., max-content)` 등은 track을 무시하고 넘쳐나
+                                 * 편집기/선택 박스가 옆 칸을 덮는 현상이 생긴다.
+                                 */
+                                if (usingGridLayout && !bodyLocked) {
+                                    tdStyle.width = "100%";
+                                    tdStyle.minWidth = 0;
+                                    tdStyle.maxWidth = undefined;
+                                }
+
                                 let errorCats: readonly SheetErrorCategoryKey[] = [];
                                 const sourceRow = props.sourceRowIndexes?.[rdex];
                                 if (
@@ -1116,8 +1205,6 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
                                             tdStyle,
                                             mergeSheetErrorCellStyles(errorCats),
                                         );
-                                        tdStyle.maxHeight = ROW_HEIGHT_PX;
-                                        tdStyle.overflow = "hidden";
                                     }
                                 }
 

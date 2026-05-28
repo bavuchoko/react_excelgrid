@@ -45,6 +45,11 @@ import { areCellValuesEqual } from "./js-grid/cellModified.ts";
 import { sortRowsByHeaderWithSourceIndexes } from "./js-grid/sortSheetContent.ts";
 import { applySheetCellEdit, applySheetCellsPaste } from "./utils/applySheetCellEdits.ts";
 import { applyHeaderLayoutToHeaders } from "./utils/applyHeaderState.ts";
+import {
+    applyColumnFiltersWithIndexes,
+    buildColumnFilterOptions,
+} from "./js-grid/columnFilter.ts";
+import ColumnFilterMenu from "./js-grid/ColumnFilterMenu.tsx";
 
 /**
  * 화면·필드 메뉴 모두에서 항상 숨기는 헤더 키 목록.
@@ -212,9 +217,15 @@ export default function  JsExcelGrid(props: GridType) {
     const [sortKey, setSortKey] = useState<string | null>(null);
     const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>('ASC');
 
-    const { rows: sortedData, sourceIndexes: sourceRowIndexes } = useMemo(
-        () => sortRowsByHeaderWithSourceIndexes(data, sortKey, sortDir, headerTypeByKey),
-        [data, sortKey, sortDir, headerTypeByKey],
+    const [columnFiltersBySheet, setColumnFiltersBySheet] = useState<
+        Record<string, Record<string, ReadonlySet<string>>>
+    >({});
+    const [openFilterColumnKey, setOpenFilterColumnKey] = useState<string | null>(null);
+    const [filterMenuPos, setFilterMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+    const columnFilters = useMemo(
+        () => (activeName ? (columnFiltersBySheet[activeName] ?? {}) : {}),
+        [activeName, columnFiltersBySheet],
     );
 
     const cellErrorLookup = useMemo(
@@ -386,6 +397,8 @@ export default function  JsExcelGrid(props: GridType) {
                     type: h?.type ?? null,
                     render: h?.render,
                     editor: h?.editor,
+                    filterable: h?.filterable,
+                    getFilterValue: h?.getFilterValue,
                 };
             });
         const rowNum: JsGridTableColumn = { key: "__rownum__", label: "#", __rownum__: true };
@@ -400,6 +413,121 @@ export default function  JsExcelGrid(props: GridType) {
         }
         return keys;
     }, [columns]);
+
+    const filterableKeysSig = useMemo(
+        () => columns.filter((c) => c.filterable).map((c) => c.key).join("\u0001"),
+        [columns],
+    );
+    useEffect(() => {
+        if (!activeName) return;
+        setColumnFiltersBySheet((prev) => {
+            const sheetFilters = prev[activeName];
+            if (!sheetFilters) return prev;
+            const allowed = new Set(columns.filter((c) => c.filterable).map((c) => c.key));
+            const nextSheet: Record<string, ReadonlySet<string>> = {};
+            let changed = false;
+            for (const [k, v] of Object.entries(sheetFilters)) {
+                if (allowed.has(k)) nextSheet[k] = v;
+                else changed = true;
+            }
+            if (!changed) return prev;
+            return { ...prev, [activeName]: nextSheet };
+        });
+        setOpenFilterColumnKey((prev) =>
+            prev != null && !columns.some((c) => c.key === prev) ? null : prev,
+        );
+    }, [filterableKeysSig, columns, activeName]);
+
+    const filteredColumnKeys = useMemo(
+        () => new Set(Object.keys(columnFilters)),
+        [columnFilters],
+    );
+
+    const filterableColumnsForData = useMemo(
+        () => columns.filter((c) => c.filterable),
+        [columns],
+    );
+
+    const { rows: filteredData, sourceIndexes: filteredSourceIndexes } = useMemo(
+        () => applyColumnFiltersWithIndexes(data, filterableColumnsForData, columnFilters),
+        [data, filterableColumnsForData, columnFilters],
+    );
+
+    const { rows: sortedData, sourceIndexes: sortRelativeSourceIndexes } = useMemo(
+        () =>
+            sortRowsByHeaderWithSourceIndexes(
+                filteredData,
+                sortKey,
+                sortDir,
+                headerTypeByKey,
+            ),
+        [filteredData, sortKey, sortDir, headerTypeByKey],
+    );
+
+    const sourceRowIndexes = useMemo(
+        () => sortRelativeSourceIndexes.map((i) => filteredSourceIndexes[i]!),
+        [sortRelativeSourceIndexes, filteredSourceIndexes],
+    );
+
+    const openFilterColumn = useMemo(
+        () =>
+            openFilterColumnKey
+                ? (columns.find((c) => c.key === openFilterColumnKey) ?? null)
+                : null,
+        [openFilterColumnKey, columns],
+    );
+    const openFilterOptions = useMemo(
+        () => (openFilterColumn ? buildColumnFilterOptions(data, openFilterColumn) : []),
+        [openFilterColumn, data],
+    );
+
+    const handleToggleColumnFilter = useCallback(
+        (args: { columnKey: string; top: number; left: number }) => {
+            setOpenFilterColumnKey((prev) => {
+                if (prev === args.columnKey) {
+                    setFilterMenuPos(null);
+                    return null;
+                }
+                setFilterMenuPos({ top: args.top, left: args.left });
+                return args.columnKey;
+            });
+        },
+        [],
+    );
+
+    const handleApplyColumnFilter = useCallback(
+        (columnKey: string, next: ReadonlySet<string> | null) => {
+            if (!activeName) return;
+            setColumnFiltersBySheet((prev) => {
+                const sheetFilters = { ...(prev[activeName] ?? {}) };
+                if (next == null) {
+                    delete sheetFilters[columnKey];
+                } else {
+                    sheetFilters[columnKey] = next;
+                }
+                const out = { ...prev };
+                if (Object.keys(sheetFilters).length === 0) {
+                    delete out[activeName];
+                } else {
+                    out[activeName] = sheetFilters;
+                }
+                return out;
+            });
+            setOpenFilterColumnKey(null);
+            setFilterMenuPos(null);
+        },
+        [activeName],
+    );
+
+    const closeColumnFilter = useCallback(() => {
+        setOpenFilterColumnKey(null);
+        setFilterMenuPos(null);
+    }, []);
+
+    useEffect(() => {
+        setOpenFilterColumnKey(null);
+        setFilterMenuPos(null);
+    }, [activeName]);
 
     const [isFieldsMenuOpen, setIsFieldsMenuOpen] = useState(false);
     const [fieldsSaveBusy, setFieldsSaveBusy] = useState(false);
@@ -580,13 +708,13 @@ export default function  JsExcelGrid(props: GridType) {
         setSelectedRowIndexes(new Set());
     }
 
-    // 시트 전환 시 정렬/선택을 초기화
+    // 시트 전환 시 정렬/선택을 초기화(필터는 시트별로 유지)
     const prevSheetIndexRef = useRef<number | null>(null);
     if (prevSheetIndexRef.current !== safeActiveIndex) {
         prevSheetIndexRef.current = safeActiveIndex;
         setSelectedRowIndexes(new Set());
         setSortKey(null);
-        setSortDir('ASC');
+        setSortDir("ASC");
     }
 
     const selectedRows = useMemo(() => {
@@ -993,6 +1121,24 @@ export default function  JsExcelGrid(props: GridType) {
                             }
                         />
 
+                        <ColumnFilterMenu
+                            open={openFilterColumnKey != null && filterMenuPos != null}
+                            pos={filterMenuPos}
+                            columnLabel={openFilterColumn?.label ?? ""}
+                            options={openFilterOptions}
+                            selected={
+                                openFilterColumnKey
+                                    ? (columnFilters[openFilterColumnKey] ?? null)
+                                    : null
+                            }
+                            onApply={(next) => {
+                                if (openFilterColumnKey) {
+                                    handleApplyColumnFilter(openFilterColumnKey, next);
+                                }
+                            }}
+                            onClose={closeColumnFilter}
+                        />
+
                         <div
                             style={{
                                 display: "flex",
@@ -1046,6 +1192,9 @@ export default function  JsExcelGrid(props: GridType) {
                                     rowIdKey={props.rowIdKey}
                                     onCellChange={props.editable === true ? tableCellChange : undefined}
                                     onCellsPaste={props.editable === true ? tableCellsPaste : undefined}
+                                    filteredColumnKeys={filteredColumnKeys}
+                                    openFilterColumnKey={openFilterColumnKey}
+                                    onToggleColumnFilter={handleToggleColumnFilter}
                                     onSortChange={(next) => {
                                         setSortKey(next.key);
                                         setSortDir(next.direction);

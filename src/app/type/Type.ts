@@ -266,6 +266,10 @@ export type JsGridTableColumn = {
     render?: ReactNode | ((args: GridCellRenderArgs) => ReactNode);
     /** `editable` 일 때 셀 편집에 사용. */
     editor?: GridCellEditor;
+    /** `true`면 헤더에 엑셀 스타일 필터 아이콘 표시(클라이언트 사이드 다중 선택). */
+    filterable?: boolean;
+    /** 필터 후보 값 추출. 없으면 `key`로 `getValue(row, key)`를 쓴다. */
+    getFilterValue?: (row: unknown) => unknown;
     __rownum__?: boolean;
     __checkbox__?: boolean;
 };
@@ -310,6 +314,10 @@ export type Header = {
      * - JSX/ReactNode: `row`, `value`, `columnKey`, `rowIndex`, `onChange`, `onClose` props 주입
      */
     editor?: GridCellEditor;
+    /** `true`면 헤더에 엑셀 스타일 필터 아이콘 표시(클라이언트 사이드 다중 선택). */
+    filterable?: boolean;
+    /** 필터 후보 값 추출. 없으면 `key`로 `getValue(row, key)`를 쓴다. */
+    getFilterValue?: (row: unknown) => unknown;
 }
 
 /**
