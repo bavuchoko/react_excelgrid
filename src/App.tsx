@@ -149,7 +149,7 @@ const App = () => {
                 }}
             >
                 <JsExcelGrid
-                    fullmode={true}
+                    // fullmode={true}
                     onClose={()=>console.log(gridRef.current?.getData())}
                     ref={gridRef}
                     data={dataWithEditors}

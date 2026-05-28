@@ -120,6 +120,11 @@ export type GridType = {
     toolbarStart?: JsGridToolbarSlot
     /** 툴바 오른쪽 기본 아이콘 앞. 함수면 `runToolbarAction`으로 본문 로딩 연동 가능. */
     toolbarEnd?: JsGridToolbarSlot
+    /**
+     * 데이터 재조회 등. `ToolbarAsyncAction` API 성공 후 `useJsGridToolbar().refresh` 로 호출된다.
+     * 미전달 시 no-op(에러 없음).
+     */
+    refresh?: () => void | Promise<void>
     style?: CSSProperties
     /**
      * `getData()` 등 명령형 API.

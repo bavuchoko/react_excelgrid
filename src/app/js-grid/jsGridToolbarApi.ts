@@ -16,4 +16,9 @@ export type JsGridToolbarApi = {
     ) => Promise<void>;
     /** 본문 블러·오버레이만 직접 켜기/끄기 */
     setBodyOverlay: (overlay: ToolbarBodyOverlay | null) => void;
+    /**
+     * `JsExcelGrid` `refresh` prop 과 동일. 없으면 `undefined`.
+     * `ToolbarAsyncAction` 등에서 API 성공 후 `api?.refresh?.()` 로 호출.
+     */
+    refresh?: () => void | Promise<void>;
 };

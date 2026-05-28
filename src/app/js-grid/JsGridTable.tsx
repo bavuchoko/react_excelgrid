@@ -271,6 +271,17 @@ const JsGridTable = forwardRef<JsGridTableHandle, Props>(function JsGridTable(pr
         }
     }, [editingEnabled]);
 
+    /**
+     * 정렬 변경 시 표시 행 인덱스가 바뀌므로, 기존 선택/드래그/편집 상태를 유지하면
+     * 복사·붙여넣기 범위가 엉킬 수 있다. 정렬 변경 시 즉시 취소한다.
+     */
+    useEffect(() => {
+        setEditorSession(null);
+        setCellRange(null);
+        dragStateRef.current = null;
+        lastClickRef.current = null;
+    }, [props.sortKey, props.sortDir]);
+
     const closeEditor = useCallback(() => setEditorSession(null), []);
 
     const isBodyCellSelectable = useCallback(

@@ -54,6 +54,7 @@ export default function ToolbarAsyncAction({
             } else {
                 await Promise.resolve(onClick());
             }
+            await Promise.resolve(toolbarApi?.refresh?.());
         } finally {
             setBusy(false);
         }

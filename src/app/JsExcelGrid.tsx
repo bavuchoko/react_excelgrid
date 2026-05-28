@@ -18,6 +18,7 @@ import type {
 } from "./type/Type.ts";
 import {useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState} from "react";
 import { JsGridToolbarProvider } from "./js-grid/JsGridToolbarContext.tsx";
+import type { JsGridToolbarApi } from "./js-grid/jsGridToolbarApi.ts";
 import {
     JsGridRowSelectionProvider,
     type JsGridRowSelectionApi,
@@ -787,10 +788,11 @@ export default function  JsExcelGrid(props: GridType) {
         [],
     );
 
-    const toolbarApi = useMemo(
-        () => ({ runToolbarAction, setBodyOverlay }),
-        [runToolbarAction, setBodyOverlay],
-    );
+    const toolbarApi = useMemo((): JsGridToolbarApi => {
+        const api: JsGridToolbarApi = { runToolbarAction, setBodyOverlay };
+        if (props.refresh) api.refresh = props.refresh;
+        return api;
+    }, [runToolbarAction, setBodyOverlay, props.refresh]);
 
     const renderToolbarSlot = useCallback(
         (slot?: JsGridToolbarSlot) => {

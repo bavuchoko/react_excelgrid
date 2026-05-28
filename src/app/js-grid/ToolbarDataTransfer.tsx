@@ -102,6 +102,7 @@ export default function ToolbarDataTransfer({
             } else {
                 await run();
             }
+            await Promise.resolve(toolbarApi?.refresh?.());
         } finally {
             setBusy(false);
         }
