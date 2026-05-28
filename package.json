@@ -1,6 +1,6 @@
 {
   "name": "@bavuchoko/react-excelgrid",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "description": "Excel-like data grid for React — multi-sheet, editable, resizable columns, field reorder/hide.",
   "keywords": [
